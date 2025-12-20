@@ -1,0 +1,31 @@
+import json
+import os
+import sys
+
+class CatalogueService:
+    def __init__(self):
+        self.config_file = "system_config.json"
+        self.config_path = self._get_config_path()
+        self.system_data = self.load_config()
+
+    def _get_config_path(self):
+        """
+        Robust path finding for Mac/Windows compatibility.
+        Looks for 'config' folder in the project root.
+        """
+        base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        return os.path.join(base_dir, "config", self.config_file)
+
+    def load_config(self):
+        """Loads the topology from JSON as required by the proposal."""
+        try:
+            with open(self.config_path, 'r') as file:
+                data = json.load(file)
+                print(f"✅ Configuration loaded for: {data['project_name']}")
+                return data
+        except FileNotFoundError:
+            print(f"❌ Error: Config file not found at {self.config_path}")
+            sys.exit(1)
+
+if __name__ == "__main__":
+    catalogue = CatalogueService()

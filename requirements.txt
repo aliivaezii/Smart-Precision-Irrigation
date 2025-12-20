@@ -1,0 +1,10 @@
+# Communication
+paho-mqtt>=1.6.1      # For MQTT Pub/Sub
+requests>=2.31.0      # For REST API calls (Weather & ThingSpeak) 
+
+# Data Handling
+pandas>=2.0.0         # For data processing (optional but good for Water Manager)
+numpy>=1.24.0
+
+# Services
+python-telegram-bot>=20.0  # For the Telegram Bot Actor
