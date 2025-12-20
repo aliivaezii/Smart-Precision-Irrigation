@@ -1,0 +1,23 @@
+# --- Python ---
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+.env
+
+# --- VS Code ---
+.vscode/
+
+# --- macOS Junk ---
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# --- Windows Junk ---
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
