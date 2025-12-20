@@ -1,65 +1,33 @@
 {
     "project_name": "Smart Precision Irrigation",
     "version": "2.0",
-    "mqtt_broker": {
+    "broker": {
         "address": "test.mosquitto.org",
         "port": 1883
     },
     "settings": {
-        "location": {
-            "city": "Turin",
-            "lat": 45.0703,
-            "lon": 7.6869
-        },
-        "irrigation_policy": {
-            "rain_threshold_mm": 5.0,
-            "min_soil_moisture": 30.0
-        }
-    },
-    "services": {
-        "weather_check": {
-            "poll_interval_sec": 3600,
-            "api_url": "https://api.open-meteo.com/v1/forecast"
-        },
-        "telegram_bot": {
-            "chat_id_env_var": "TELEGRAM_CHAT_ID",
-            "bot_token_env_var": "TELEGRAM_BOT_TOKEN"
-        }
+        "lat": 45.06,
+        "lon": 7.66,
+        "rain_threshold_mm": 5.0
     },
     "devices": [
         {
-            "id": "field_01_sensor",
-            "type": "sensor_board",
-            "name": "Field 1 Soil/Temp Monitor",
-            "hardware_type": "RaspberryPiPico2W",
+            "device_id": "field_1_sensor",
+            "device_type": "sensor_node",
+            "name": "Field 1 Moisture Monitor",
             "topics": {
-                "publish": "farm/field_01/telemetry",
-                "subscribe": "farm/field_01/config"
-            },
-            "sensors": ["moisture_capacitive", "mcp9808_temp"]
+                "publish": "farm/field_1/telemetry",
+                "subscribe": "farm/field_1/config"
+            }
         },
         {
-            "id": "field_01_valve",
-            "type": "actuator_board",
-            "name": "Field 1 Valve Control",
-            "hardware_type": "RaspberryPiPico2W",
+            "device_id": "field_1_valve",
+            "device_type": "actuator_node",
+            "name": "Field 1 Valve",
             "topics": {
-                "publish": "farm/field_01/valve/status",
-                "subscribe": "farm/field_01/valve/command"
-            },
-            "actuators": ["solenoid_valve"]
-        },
-        {
-            "id": "main_pump_01",
-            "type": "pump_station",
-            "name": "Main Water Pump Station",
-            "hardware_type": "RaspberryPiPico2W",
-            "topics": {
-                "publish": "farm/pump/telemetry",
-                "subscribe": "farm/pump/command"
-            },
-            "sensors": ["flow_sensor", "current_sensor"],
-            "actuators": ["water_pump_relay"]
+                "publish": "farm/field_1/valve_status",
+                "subscribe": "farm/field_1/valve_cmd"
+            }
         }
     ]
 }
