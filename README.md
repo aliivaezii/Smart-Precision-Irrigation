@@ -60,3 +60,43 @@ Running on a **Raspberry Pi 5** Gateway, communicating via **MQTT** and **REST**
 ```bash
 git clone [https://github.com/YOUR_USERNAME/Smart-Precision-Irrigation.git](https://github.com/YOUR_USERNAME/Smart-Precision-Irrigation.git)
 cd Smart-Precision-Irrigation
+```
+### 2. Set Up Virtual Environment
+**Mac/Linux:**
+```bash
+python3 -m venv venv
+source venv/bin/activate
+```
+**Windows:**
+```bash
+python -m venv venv
+venv\Scripts\activate
+```
+
+### 3. Install Dependencies
+```bash
+pip install -r requirements.txt
+```
+
+---
+
+## ⚙️ Configuration
+The system uses a centralized configuration file located at `config/system_config.json`. This allows adding new fields or changing settings without modifying the source code.
+
+**Key Settings:**
+* `rain_threshold_mm`: Minimum predicted rain to cancel irrigation (default >5mm).
+* `mqtt_broker`: Address of your local or cloud MQTT broker.
+* `telegram`: API tokens (Do not hardcode these; use Environment Variables).
+
+---
+
+## 👥 Team Members
+* **Ali Vaezi** (s336256) 
+* **Nicolas Restrepo-Lopez** (s336477) 
+* **Roderick Tossato Silva** (s336217) 
+* **Ludovica Deriu** (s348173)
+
+---
+
+## 📄 License
+This project is licensed under the **MIT License**. See the [LICENSE](LICENSE) file for details.
