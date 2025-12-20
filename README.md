@@ -58,7 +58,7 @@ Running on a **Raspberry Pi 5** Gateway, communicating via **MQTT** and **REST**
 
 ### 1. Clone the Repository
 ```bash
-git clone [https://github.com/YOUR_USERNAME/Smart-Precision-Irrigation.git](https://github.com/aliivaezii/Smart-Precision-Irrigation.git)
+git clone [https://github.com/aliivaezii/Smart-Precision-Irrigation.git](https://github.com/aliivaezii/Smart-Precision-Irrigation.git)
 cd Smart-Precision-Irrigation
 ```
 ### 2. Set Up Virtual Environment
