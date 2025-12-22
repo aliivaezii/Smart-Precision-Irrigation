@@ -1,6 +1,9 @@
 {
-    "project_name": "Smart Precision Irrigation",
-    "version": "2.0",
+    "project_info": {
+        "name": "Smart Precision Irrigation System",
+        "version": "2.0",
+        "description": "IoT-based precision irrigation platform for smart agriculture"
+    },
     "broker": {
         "address": "test.mosquitto.org",
         "port": 1883
@@ -8,25 +11,56 @@
     "settings": {
         "lat": 45.06,
         "lon": 7.66,
-        "rain_threshold_mm": 5.0
+        "rain_threshold_mm": 5.0,
+        "moisture_threshold": 30.0
+    },
+    "telegram": {
+        "token": "YOUR_BOT_TOKEN_HERE",
+        "chat_ids": []
+    },
+    "thingspeak": {
+        "channel_id": "YOUR_CHANNEL_ID",
+        "write_api_key": "YOUR_WRITE_API_KEY",
+        "field_map": {
+            "soil_moisture": "field1",
+            "temperature": "field2"
+        }
     },
     "devices": [
         {
-            "device_id": "field_1_sensor",
-            "device_type": "sensor_node",
-            "name": "Field 1 Moisture Monitor",
+            "id": "sensor_node_field_1",
+            "name": "Field 1 Soil Moisture Sensor",
+            "type": "sensor",
             "topics": {
-                "publish": "farm/field_1/telemetry",
-                "subscribe": "farm/field_1/config"
+                "publish": ["farm/field_1/soil_moisture", "farm/field_1/temperature"],
+                "subscribe": ["farm/field_1/config"]
             }
         },
         {
-            "device_id": "field_1_valve",
-            "device_type": "actuator_node",
-            "name": "Field 1 Valve",
+            "id": "sensor_node_field_2",
+            "name": "Field 2 Soil Moisture Sensor",
+            "type": "sensor",
             "topics": {
-                "publish": "farm/field_1/valve_status",
-                "subscribe": "farm/field_1/valve_cmd"
+                "publish": ["farm/field_2/soil_moisture", "farm/field_2/temperature"],
+                "subscribe": ["farm/field_2/config"]
+            }
+        },
+        {
+            "id": "actuator_valve_1",
+            "name": "Field 1 Irrigation Valve",
+            "type": "actuator",
+            "topics": {
+                "publish": ["farm/field_1/valve_status"],
+                "subscribe": ["farm/field_1/valve_cmd"]
+            }
+        },
+        {
+            "id": "actuator_valve_2",
+            "name": "Field 2 Irrigation Valve",
+            "type": "actuator",
+            "topics": {
+                "publish": ["farm/field_2/valve_status"],
+                "subscribe": ["farm/field_2/valve_cmd"]
             }
         }
     ]

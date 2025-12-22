@@ -1,70 +1,88 @@
+import sys
+import os
+sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'common'))
+
+from MyMQTT import MyMQTT
 import time
-import json
 import requests
 import random
-from paho.mqtt import client as mqtt
+import json
 
-# --- The Wrapper Class (from your MyMQTT.py) ---
-class MQTTClient:
-    def __init__(self, client_id, broker, port):
-        self.client = mqtt.Client(client_id=client_id)
-        self.broker = broker
-        self.port = port
 
-    def start(self):
-        self.client.connect(self.broker, self.port)
-        self.client.loop_start()
-
-    def publish(self, topic, msg):
-        self.client.publish(topic, msg)
-
-# --- The Main Sensor Class (Hybrid: REST Bootstrap -> MQTT Loop) ---
-class SmartSensor:
+class SensorNode:
+    
+    
     def __init__(self, catalogue_url, device_id):
-        self.catalogue_url = catalogue_url
         self.device_id = device_id
         
-        # 1. BOOTSTRAP: Ask Catalogue for settings
-        print(f"🌍 Connecting to Catalogue at {catalogue_url}...")
-        config = self.get_configuration()
+        # 1. Bootstrap: Get config from Catalogue
+        print(f"[Sensor] Fetching config from {catalogue_url}...")
+        res = requests.get(catalogue_url)
+        data = res.json()
         
-        # 2. Extract MQTT details
-        self.broker = config['broker']['address']
-        self.port = config['broker']['port']
+        self.broker = data['broker']['address']
+        self.port = data['broker']['port']
         
-        # Find MY topic in the list
-        my_settings = next((d for d in config['devices'] if d['device_id'] == self.device_id), None)
-        if not my_settings:
+        # Find my device in the list
+        my_device = None
+        for d in data['devices']:
+            if d['id'] == device_id:
+                my_device = d
+                break
+        
+        if not my_device:
             raise ValueError(f"Device {device_id} not found in Catalogue!")
+        
+        self.topics = my_device['topics']['publish']
+        if isinstance(self.topics, str):
+            self.topics = [self.topics]
             
-        self.topic_pub = my_settings['topics']['publish']
-        print(f"✅ Configured! Broker: {self.broker}, Topic: {self.topic_pub}")
+        print(f"[Sensor] Configured: broker={self.broker}, topics={self.topics}")
+        
+        
+        self.client = MyMQTT(device_id, self.broker, self.port)
+        self.client.start()
+        time.sleep(1)
 
-        # 3. START MQTT
-        self.mqtt = MQTTClient(self.device_id, self.broker, self.port)
-        self.mqtt.start()
+    def sense(self):
+        """Simulate sensor reading (like BaseSensor.sense())"""
+        moisture = random.uniform(20.0, 80.0)
+        temperature = random.uniform(15.0, 35.0)
+        return {
+            'soil_moisture': round(moisture, 1),
+            'temperature': round(temperature, 1)
+        }
 
-    def get_configuration(self):
-        response = requests.get(self.catalogue_url)
-        return response.json()
-
-    def run(self):
-        print("🚀 Sensor running...")
+    def run(self, freq=10):
+        """Main loop (like SensorPub.run())"""
+        print(f"[Sensor] Running... publishing every {freq}s")
         while True:
-            # Simulate Moisture Data
-            moisture = random.uniform(20.0, 60.0)
-            payload = json.dumps({
-                "device_id": self.device_id,
-                "moisture": moisture,
-                "timestamp": time.time()
-            })
+            reading = self.sense()
+            msg = {
+                'bn': self.device_id,
+                'n': 'soil_sensor',
+                't': time.time(),
+                'v': reading
+            }
             
-            self.mqtt.publish(self.topic_pub, payload)
-            print(f"📡 Published: {moisture:.1f}%")
-            time.sleep(5)
+            for topic in self.topics:
+                self.client.publish(topic, json.dumps(msg))
+                print(f"[Sensor] Published to {topic}: moisture={reading['soil_moisture']}%")
+            
+            time.sleep(freq)
 
-if __name__ == "__main__":
-    # Create one sensor instance
-    # Note: Ensure CatalogueService is running on port 8080 first!
-    sensor = SmartSensor("http://localhost:8080/", "field_1_sensor")
-    sensor.run()
+    def stop(self):
+        self.client.stop()
+
+
+if __name__ == '__main__':
+    
+    catalogue_url = 'http://localhost:8080/'
+    device_id = 'sensor_node_field_1'
+    
+    sensor = SensorNode(catalogue_url, device_id)
+    try:
+        sensor.run(freq=10)
+    except KeyboardInterrupt:
+        sensor.stop()
+        print("[Sensor] Stopped")

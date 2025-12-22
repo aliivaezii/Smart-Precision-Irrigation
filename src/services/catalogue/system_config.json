@@ -21,10 +21,10 @@ class CatalogueService:
         try:
             with open(self.config_path, 'r') as file:
                 data = json.load(file)
-                print(f"✅ Configuration loaded for: {data['project_name']}")
+                print(f"Configuration loaded for: {data['project_name']}")
                 return data
         except FileNotFoundError:
-            print(f"❌ Error: Config file not found at {self.config_path}")
+            print(f"Error: Config file not found at {self.config_path}")
             sys.exit(1)
 
 if __name__ == "__main__":

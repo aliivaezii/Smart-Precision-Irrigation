@@ -1,48 +1,51 @@
-import cherrypy
 import json
 import os
-import sys
+import cherrypy
+
 
 class CatalogueService:
     exposed = True
 
-    def __init__(self):
-        self.config_path = self._find_config()
-        self.data = self._load_config()
+    def __init__(self, file_path):
+        self.file_path = file_path
+        self.data = self.load()
+        print(f"[Catalogue] Loaded {len(self.data.get('devices', []))} devices")
 
-    def _find_config(self):
-        # Professional path finding (Mac/Windows compatible)
-        base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
-        return os.path.join(base_dir, "config", "system_config.json")
-
-    def _load_config(self):
-        with open(self.config_path, "r") as f:
+    def load(self):
+        if not os.path.exists(self.file_path):
+            raise FileNotFoundError(f"Config not found: {self.file_path}")
+        with open(self.file_path, "r") as f:
             return json.load(f)
 
     @cherrypy.tools.json_out()
     def GET(self, *uri, **params):
-        # 1. GET / -> Return whole config
-        if not uri:
+        if len(uri) == 0:
             return self.data
-        
-        # 2. GET /broker -> Return just broker info
-        if uri[0] == "broker":
-            return self.data["broker"]
-        
-        # 3. GET /devices -> Return list of devices
-        if uri[0] == "devices":
-            return self.data["devices"]
-        
-        return cherrypy.HTTPError(404, "Endpoint not found")
+        elif uri[0] == "broker":
+            return self.data.get("broker", {})
+        elif uri[0] == "devices":
+            return self.data.get("devices", [])
+        elif uri[0] == "settings":
+            return self.data.get("settings", {})
+        else:
+            raise cherrypy.HTTPError(404, "Not found")
+
 
 if __name__ == "__main__":
+    # Find config file path
+    base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+    config_path = os.path.join(base_dir, "config", "system_config.json")
+
     conf = {
         "/": {
             "request.dispatch": cherrypy.dispatch.MethodDispatcher(),
             "tools.sessions.on": True,
         }
     }
-    cherrypy.tree.mount(CatalogueService(), "/", conf)
-    cherrypy.config.update({'server.socket_host': '0.0.0.0', 'server.socket_port': 8080})
+
+    cherrypy.tree.mount(CatalogueService(config_path), "/", conf)
+    cherrypy.config.update({"server.socket_host": "0.0.0.0", "server.socket_port": 8080})
+    
+    print("Catalogue Service running on http://0.0.0.0:8080")
     cherrypy.engine.start()
     cherrypy.engine.block()
