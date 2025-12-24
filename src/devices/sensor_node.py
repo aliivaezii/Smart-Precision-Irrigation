@@ -54,16 +54,27 @@ class SensorNode:
         }
 
     def run(self, freq=10):
-        """Main loop (like SensorPub.run())"""
+        """Main loop - publish sensor readings in SenML format."""
         print(f"[Sensor] Running... publishing every {freq}s")
         while True:
             reading = self.sense()
-            msg = {
-                'bn': self.device_id,
-                'n': 'soil_sensor',
-                't': time.time(),
-                'v': reading
-            }
+            
+            # SenML format as per course reference:
+            # List of measurements, each with bn, n, t, v (single value)
+            msg = [
+                {
+                    'bn': self.device_id,
+                    'n': 'soil_moisture',
+                    't': time.time(),
+                    'v': reading['soil_moisture']
+                },
+                {
+                    'bn': self.device_id,
+                    'n': 'temperature',
+                    't': time.time(),
+                    'v': reading['temperature']
+                }
+            ]
             
             for topic in self.topics:
                 self.client.publish(topic, json.dumps(msg))
