@@ -2,17 +2,21 @@
     "project_info": {
         "name": "Smart Precision Irrigation System",
         "version": "2.0",
-        "description": "IoT-based precision irrigation platform for smart agriculture"
+        "description": "IoT-based precision irrigation platform for smart agriculture",
+        "topic_prefix": "smart_irrigation"
     },
     "broker": {
-        "address": "test.mosquitto.org",
-        "port": 1883
+        "address": "broker.hivemq.com",
+        "port": 1883,
+        "port_tls": 8883,
+        "port_websocket": 8000,
+        "port_websocket_tls": 8884
     },
     "topics": {
-        "weather_alert": "weather/alert",
-        "frost_alert": "weather/frost",
-        "irrigation_command": "irrigation/+/command",
-        "resource_usage": "irrigation/usage"
+        "weather_alert": "smart_irrigation/weather/alert",
+        "frost_alert": "smart_irrigation/weather/frost",
+        "irrigation_command": "smart_irrigation/irrigation/+/command",
+        "resource_usage": "smart_irrigation/irrigation/usage"
     },
     "settings": {
         "lat": 45.06,
@@ -55,8 +59,8 @@
             "name": "Field 1 Soil Moisture Sensor",
             "type": "sensor",
             "topics": {
-                "publish": ["farm/field_1/soil_moisture", "farm/field_1/temperature"],
-                "subscribe": ["farm/field_1/config"]
+                "publish": ["smart_irrigation/farm/field_1/soil_moisture", "smart_irrigation/farm/field_1/temperature"],
+                "subscribe": ["smart_irrigation/farm/field_1/config"]
             }
         },
         {
@@ -64,8 +68,8 @@
             "name": "Field 2 Soil Moisture Sensor",
             "type": "sensor",
             "topics": {
-                "publish": ["farm/field_2/soil_moisture", "farm/field_2/temperature"],
-                "subscribe": ["farm/field_2/config"]
+                "publish": ["smart_irrigation/farm/field_2/soil_moisture", "smart_irrigation/farm/field_2/temperature"],
+                "subscribe": ["smart_irrigation/farm/field_2/config"]
             }
         },
         {
@@ -73,8 +77,8 @@
             "name": "Field 1 Irrigation Valve",
             "type": "actuator",
             "topics": {
-                "publish": ["farm/field_1/valve_status"],
-                "subscribe": ["farm/field_1/valve_cmd"]
+                "publish": ["smart_irrigation/farm/field_1/valve_status"],
+                "subscribe": ["smart_irrigation/farm/field_1/valve_cmd"]
             }
         },
         {
@@ -82,8 +86,8 @@
             "name": "Field 2 Irrigation Valve",
             "type": "actuator",
             "topics": {
-                "publish": ["farm/field_2/valve_status"],
-                "subscribe": ["farm/field_2/valve_cmd"]
+                "publish": ["smart_irrigation/farm/field_2/valve_status"],
+                "subscribe": ["smart_irrigation/farm/field_2/valve_cmd"]
             }
         }
     ]
