@@ -32,6 +32,11 @@ class TelegramBot():
         self.broker = data['broker']['address']
         self.port = data['broker']['port']
         
+        # Get topics from Catalogue (dynamic, supports any prefix)
+        topics_config = data.get('topics', {})
+        self.topic_weather_alert = topics_config.get('weather_alert', 'smart_irrigation/weather/alert')
+        self.topic_irrigation_cmd = topics_config.get('irrigation_command', 'smart_irrigation/irrigation/+/command')
+        
         # Telegram settings
         telegram = data.get('telegram', {})
         self.token = telegram.get('token', '')
@@ -64,9 +69,10 @@ class TelegramBot():
             res = requests.get(url)
             devices = res.json()
             
-            # Standard system subscriptions
-            self.client.subscribe('weather/alert', qos=1)
-            self.client.subscribe('irrigation/+/command', qos=0) # Monitor other commands
+            # Standard system subscriptions (from Catalogue config)
+            self.client.subscribe(self.topic_weather_alert, qos=1)
+            self.client.subscribe(self.topic_irrigation_cmd, qos=0)  # Monitor commands
+            print(f"[TelegramBot] Subscribed to: {self.topic_weather_alert}, {self.topic_irrigation_cmd}")
             
             # Dynamic device subscriptions
             for dev in devices:
@@ -256,7 +262,7 @@ class TelegramBot():
             return
 
         # 2. Handle Weather Alerts (dict format)
-        if topic == 'weather/alert' and isinstance(data, dict):
+        if topic == self.topic_weather_alert and isinstance(data, dict):
             status = data.get('status', '')
             rain_mm = data.get('precipitation_mm', 0)
             if status == 'ACTIVE':
