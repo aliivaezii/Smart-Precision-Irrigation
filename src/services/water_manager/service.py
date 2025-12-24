@@ -21,14 +21,27 @@ class WaterManager:
     All MQTT topics are dynamically loaded from Catalogue.
     """
     
-    # Crop water requirements (mm per day at 100% deficit)
-    CROP_WATER_NEEDS = {
-        'tomato': 6.0,
-        'wheat': 4.0,
-        'corn': 5.5,
-        'lettuce': 4.5,
-        'default': 5.0
+    # Crop factor: multiplier for water needs (higher = more water)
+    # Used in formula: water_needed_mm = (target - current) * crop_factor
+    CROP_FACTORS = {
+        'tomato': 1.2,      # High water demand
+        'lettuce': 0.8,     # Low water demand  
+        'wheat': 0.6,       # Lower water demand
+        'corn': 1.0,        # Medium water demand
+        'default': 1.0
     }
+    
+    # Fallback: simple duration lookup (seconds) if config missing
+    CROP_DURATION_LOOKUP = {
+        'tomato': 600,      # 10 minutes
+        'lettuce': 300,     # 5 minutes
+        'wheat': 240,       # 4 minutes
+        'corn': 480,        # 8 minutes
+        'default': 300      # 5 minutes
+    }
+    
+    # Target soil moisture percentage
+    TARGET_MOISTURE = 70.0
     
     def __init__(self, catalogue_url):
         # 1. Bootstrap: Get config from Catalogue
@@ -87,41 +100,52 @@ class WaterManager:
         """
         Calculate irrigation duration based on crop type and moisture deficit.
         
-        Formula:
-        - moisture_deficit = threshold - current_moisture (as percentage)
-        - water_needed_mm = (deficit / 100) * crop_water_need_per_day
-        - water_liters = water_needed_mm * field_size_m2
-        - duration_seconds = (water_liters / flow_rate_lpm) * 60
+        Smart Formula (as per proposal):
+        - water_needed_mm = (target_moisture - current_moisture) * crop_factor
+        - total_liters = water_needed_mm * field_size_m2
+        - duration_sec = total_liters / (flow_rate_lpm / 60)
+        
+        Falls back to lookup table if field config is missing.
         """
         # Get field configuration
         field_config = self.fields_config.get(field_id, {})
         
+        # If no config, use simple lookup table
+        if not field_config:
+            print(f"[WaterManager] No config for {field_id}, using lookup table")
+            crop_type = 'default'
+            return self.CROP_DURATION_LOOKUP.get(crop_type, 300)
+        
         crop_type = field_config.get('crop_type', 'default')
         field_size = field_config.get('field_size_m2', 100)
-        flow_rate = field_config.get('flow_rate_lpm', 10.0)
+        flow_rate_lpm = field_config.get('flow_rate_lpm', 20.0)
         
-        # Get crop water need
-        water_need_mm = self.CROP_WATER_NEEDS.get(crop_type, self.CROP_WATER_NEEDS['default'])
+        # Get crop factor
+        crop_factor = self.CROP_FACTORS.get(crop_type, self.CROP_FACTORS['default'])
         
-        # Calculate moisture deficit (how much below threshold)
-        moisture_deficit = max(0, self.moisture_threshold - current_moisture)
-        deficit_ratio = moisture_deficit / 100.0
+        # Calculate moisture deficit (how much below target)
+        moisture_deficit = max(0, self.TARGET_MOISTURE - current_moisture)
         
-        # Calculate water needed
-        # Simplified: if 30% deficit, apply 30% of daily water need
-        water_needed_mm = deficit_ratio * water_need_mm
-        water_liters = water_needed_mm * field_size  # 1mm on 1m² = 1 liter
+        # Smart Formula:
+        # water_needed_mm = (target - current) * crop_factor
+        water_needed_mm = moisture_deficit * crop_factor
         
-        # Calculate duration
-        duration_seconds = (water_liters / flow_rate) * 60
+        # total_liters = water_needed_mm * field_size_m2 (1mm on 1m² = 1 liter)
+        total_liters = water_needed_mm * field_size
+        
+        # duration_sec = total_liters / flow_rate_lps
+        # flow_rate_lps = flow_rate_lpm / 60
+        flow_rate_lps = flow_rate_lpm / 60.0
+        duration_seconds = total_liters / flow_rate_lps
         
         # Clamp to reasonable range (min 60s, max 30 min)
         duration_seconds = max(60, min(1800, duration_seconds))
         
         print(f"[WaterManager] Smart calculation for {field_id}:")
-        print(f"    Crop: {crop_type}, Field: {field_size}m², Flow: {flow_rate}L/min")
-        print(f"    Deficit: {moisture_deficit:.1f}%, Water needed: {water_liters:.1f}L")
-        print(f"    Duration: {duration_seconds:.0f}s ({duration_seconds/60:.1f} min)")
+        print(f"    Crop: {crop_type} (factor={crop_factor}), Field: {field_size}m²")
+        print(f"    Moisture: {current_moisture}% → Target: {self.TARGET_MOISTURE}%")
+        print(f"    Water needed: {water_needed_mm:.1f}mm = {total_liters:.1f}L")
+        print(f"    Flow: {flow_rate_lpm}L/min → Duration: {duration_seconds:.0f}s")
         
         return int(duration_seconds)
 
@@ -132,9 +156,9 @@ class WaterManager:
         except:
             return
         
-        # Handle weather alerts (rain)
+        # Handle weather alerts (rain) - dict format
         if topic == self.topic_weather_alert:
-            if data.get('status') == 'ACTIVE':
+            if isinstance(data, dict) and data.get('status') == 'ACTIVE':
                 self.rain_alert = True
                 print("[WaterManager] 🌧️ Rain alert ACTIVE - irrigation suspended")
             else:
@@ -142,9 +166,9 @@ class WaterManager:
                 print("[WaterManager] Rain alert cleared")
             return
         
-        # Handle frost alerts
+        # Handle frost alerts - dict format
         if topic == self.topic_frost_alert:
-            if data.get('status') == 'ACTIVE':
+            if isinstance(data, dict) and data.get('status') == 'ACTIVE':
                 self.frost_alert = True
                 temp = data.get('value', 'N/A')
                 print(f"[WaterManager] ❄️ Frost alert ACTIVE ({temp}°C) - irrigation suspended")
@@ -153,15 +177,32 @@ class WaterManager:
                 print("[WaterManager] Frost alert cleared")
             return
         
-        # Handle sensor data
-        if 'v' in data and 'soil_moisture' in data['v']:
-            device_id = data.get('bn', 'unknown')
-            moisture = data['v']['soil_moisture']
-            self.memory[device_id] = moisture
-            print(f"[WaterManager] Received: {device_id} -> moisture={moisture}%")
+        # Handle sensor data in SenML format (list of measurements)
+        # Format: [{'bn': '...', 'n': 'soil_moisture', 't': ..., 'v': 25}, ...]
+        if isinstance(data, list):
+            device_id = None
+            moisture = None
             
-            # Evaluate irrigation
-            self.evaluate(device_id, moisture)
+            for measurement in data:
+                if 'bn' in measurement:
+                    device_id = measurement['bn']
+                if measurement.get('n') == 'soil_moisture':
+                    moisture = measurement['v']
+            
+            if device_id and moisture is not None:
+                self.memory[device_id] = moisture
+                print(f"[WaterManager] Received: {device_id} -> moisture={moisture}%")
+                self.evaluate(device_id, moisture)
+            return
+        
+        # Fallback: Handle old dict format (backward compatibility)
+        if isinstance(data, dict) and 'v' in data:
+            if isinstance(data['v'], dict) and 'soil_moisture' in data['v']:
+                device_id = data.get('bn', 'unknown')
+                moisture = data['v']['soil_moisture']
+                self.memory[device_id] = moisture
+                print(f"[WaterManager] Received: {device_id} -> moisture={moisture}%")
+                self.evaluate(device_id, moisture)
 
     def evaluate(self, device_id, moisture):
         """
