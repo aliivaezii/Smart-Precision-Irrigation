@@ -177,22 +177,6 @@ class MyMQTT:
 
 ### 5.2 Device Layer
 
-#### `src/devices/base_device.py`
-
-**Purpose**: Abstract base class for all IoT devices.
-
-**Attributes**:
-- `device_id`: Unique identifier
-- `device_type`: Type classification (sensor/actuator)
-- `is_running`: Operational status flag
-
-**Methods**:
-- `start()`: Activate the device
-- `stop()`: Deactivate the device
-- `get_status()`: Return current device state
-
----
-
 #### `src/devices/sensor_node.py`
 
 **Purpose**: Simulates a soil moisture and temperature sensor node.
