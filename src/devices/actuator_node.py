@@ -27,9 +27,9 @@ class ActuatorNode:
     Publishes status updates and water/energy consumption when state changes.
     """
     
-    # Simulation constants
-    FLOW_RATE_LPM = 10.0      # Liters per minute (default)
-    PUMP_POWER_KW = 0.5       # Pump power in kilowatts
+    # Simulation constants (as per proposal specifications)
+    FLOW_RATE_LPM = 20.0      # Liters per minute (default)
+    PUMP_POWER_KW = 0.75      # Pump power in kilowatts
     
     def __init__(self, catalogue_url, device_id):
         self.catalogue_url = catalogue_url
@@ -55,7 +55,7 @@ class ActuatorNode:
         
         # Get resource monitoring topic
         topics_config = data.get('topics', {})
-        self.topic_resource = topics_config.get('resource_usage', 'irrigation/resource_usage')
+        self.topic_resource = topics_config.get('resource_usage', 'irrigation/usage')
         
         # 2. Find my device configuration in the list
         my_device = None
@@ -185,33 +185,53 @@ class ActuatorNode:
             print(f"[Actuator {self.device_id}] Valve already closed")
 
     def publish_resource_usage(self, water_liters, energy_kwh, duration):
-        """Publish water and energy consumption for ThingSpeak."""
-        msg = {
-            'bn': self.device_id,
-            'n': 'resource_usage',
-            't': time.time(),
-            'v': {
-                'water_liters': round(water_liters, 2),
-                'energy_kwh': round(energy_kwh, 4),
-                'duration_s': round(duration, 1)
-            }
-        }
+        """
+        Publish water and energy consumption in SenML format.
         
-        # Publish to resource topic
+        SenML format as per course reference:
+        List of measurements, each with bn, n, t, v (single value)
+        """
+        msg = [
+            {
+                'bn': self.device_id,
+                'n': 'water_liters',
+                't': time.time(),
+                'v': round(water_liters, 2)
+            },
+            {
+                'bn': self.device_id,
+                'n': 'energy_kwh',
+                't': time.time(),
+                'v': round(energy_kwh, 4)
+            },
+            {
+                'bn': self.device_id,
+                'n': 'duration_sec',
+                't': time.time(),
+                'v': round(duration, 1)
+            }
+        ]
+        
+        # Publish to resource topic (irrigation/usage)
         self.client.publish(self.topic_resource, json.dumps(msg))
-        print(f"[Actuator {self.device_id}] Published resource usage: {water_liters:.2f}L, {energy_kwh:.4f}kWh")
+        print(f"[Actuator {self.device_id}] Published usage: {water_liters:.2f}L, {energy_kwh:.4f}kWh")
 
     def publish_status(self, status, duration=0):
-        """Publish current valve status to the status topic."""
-        msg = {
-            'bn': self.device_id,
-            'n': 'valve_status',
-            't': time.time(),
-            'v': {
-                'status': status,
-                'duration': duration
+        """Publish current valve status in SenML format."""
+        msg = [
+            {
+                'bn': self.device_id,
+                'n': 'valve_status',
+                't': time.time(),
+                'v': status
+            },
+            {
+                'bn': self.device_id,
+                'n': 'duration',
+                't': time.time(),
+                'v': duration
             }
-        }
+        ]
         
         for topic in self.publish_topics:
             self.client.publish(topic, json.dumps(msg))
@@ -252,7 +272,6 @@ class ActuatorNode:
             self.close_valve()
         self.client.stop()
         print(f"[Actuator {self.device_id}] Stopped")
-
 
 
 if __name__ == '__main__':
