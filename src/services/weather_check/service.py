@@ -60,6 +60,10 @@ class WeatherCheck:
         self.running = False
 
     def check_weather(self):
+        """
+        Fetch weather from Open-Meteo API.
+        Returns tuple: (total_precipitation_mm, min_temperature_c)
+        """
         params = {
             'latitude': self.lat,
             'longitude': self.lon,
@@ -84,7 +88,7 @@ class WeatherCheck:
             
         except Exception as e:
             print(f"[Weather] API error: {e}")
-            return 0, 10.0 
+            return 0, 10.0  # Safe defaults
 
     def publish_rain_alert(self, rain_mm):
         """Publish rain alert if threshold exceeded."""
