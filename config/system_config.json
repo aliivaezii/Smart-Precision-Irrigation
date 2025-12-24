@@ -8,10 +8,17 @@
         "address": "test.mosquitto.org",
         "port": 1883
     },
+    "topics": {
+        "weather_alert": "weather/alert",
+        "frost_alert": "weather/frost",
+        "irrigation_command": "irrigation/+/command",
+        "resource_usage": "irrigation/usage"
+    },
     "settings": {
         "lat": 45.06,
         "lon": 7.66,
         "rain_threshold_mm": 5.0,
+        "frost_threshold_c": 2.0,
         "moisture_threshold": 30.0
     },
     "telegram": {
@@ -23,7 +30,23 @@
         "write_api_key": "YOUR_WRITE_API_KEY",
         "field_map": {
             "soil_moisture": "field1",
-            "temperature": "field2"
+            "temperature": "field2",
+            "water_liters": "field3",
+            "energy_kwh": "field4"
+        }
+    },
+    "fields": {
+        "field_1": {
+            "crop_type": "tomato",
+            "field_size_m2": 100,
+            "water_need_mm_per_day": 5.0,
+            "flow_rate_lpm": 20.0
+        },
+        "field_2": {
+            "crop_type": "wheat",
+            "field_size_m2": 200,
+            "water_need_mm_per_day": 3.0,
+            "flow_rate_lpm": 20.0
         }
     },
     "devices": [
