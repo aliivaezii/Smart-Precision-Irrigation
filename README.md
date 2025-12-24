@@ -223,5 +223,3 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 *Last Updated: December 2024*  
 *System Version: 2.0*
 
-## 📄 License
-This project is licensed under the **MIT License**. See the [LICENSE](LICENSE) file for details.
