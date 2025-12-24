@@ -214,8 +214,6 @@ The system uses `config/system_config.json` for centralized configuration:
 ## 📚 Documentation
 
 * **[ARCHITECTURE.md](docs/ARCHITECTURE.md)** — Complete technical documentation
-* **[FEATURE_AUDIT.md](docs/FEATURE_AUDIT.md)** — Feature completeness audit report
-* **[PROJECT_REVIEW.md](docs/PROJECT_REVIEW.md)** — Gap analysis and implementation status
 
 ---
 
