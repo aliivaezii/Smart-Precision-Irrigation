@@ -48,7 +48,7 @@ class ThingSpeakAdaptor:
         
         # Get resource usage topic from config
         topics_config = data.get('topics', {})
-        self.topic_resource = topics_config.get('resource_usage', 'irrigation/usage')
+        self.topic_resource = topics_config.get('resource_usage', 'smart_irrigation/irrigation/usage')
         
         # Find sensor topics
         self.sensor_topics = []
