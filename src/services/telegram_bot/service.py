@@ -182,16 +182,28 @@ class TelegramBot():
         data = self.sensor_readings.get(device_id)
         
         if data:
-            timestamp = data.get('t', 'Unknown time')
-            val = data.get('v', 'N/A')
-            unit = data.get('u', '')
-            text = f" **Sensor Status**\n\n `{device_id}`\n Time: {timestamp}\n Value: **{val} {unit}**"
+            # Handle SenML list format: [{'bn': '...', 'n': 'soil_moisture', 't': ..., 'v': 25}, ...]
+            if isinstance(data, list):
+                lines = []
+                for measurement in data:
+                    name = measurement.get('n', 'unknown')
+                    val = measurement.get('v', 'N/A')
+                    lines.append(f"  {name}: **{val}**")
+                timestamp = data[0].get('t', 'Unknown time') if data else 'Unknown'
+                readings_text = '\n'.join(lines)
+                text = f"📊 **Sensor Status**\n\n`{device_id}`\nTime: {timestamp}\n\n{readings_text}"
+            else:
+                # Fallback for old dict format
+                timestamp = data.get('t', 'Unknown time')
+                val = data.get('v', 'N/A')
+                unit = data.get('u', '')
+                text = f"📊 **Sensor Status**\n\n`{device_id}`\nTime: {timestamp}\nValue: **{val} {unit}**"
         else:
-            text = f" **Sensor Status**\n\n `{device_id}`\n No data received yet."
+            text = f"📊 **Sensor Status**\n\n`{device_id}`\nNo data received yet."
 
         keyboard = InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text='Update', callback_data=f'view_{device_id}')],
-            [InlineKeyboardButton(text='Back to Sensors', callback_data='menu_sensors')]
+            [InlineKeyboardButton(text='🔄 Update', callback_data=f'view_{device_id}')],
+            [InlineKeyboardButton(text='⬅️ Back to Sensors', callback_data='menu_sensors')]
         ])
         self.bot.editMessageText((chat_id, msg_id), text, reply_markup=keyboard, parse_mode='Markdown')
 
@@ -233,39 +245,24 @@ class TelegramBot():
         except:
             return
         
-        # 1. Handle Sensor Data
+        # 1. Handle Sensor Data in SenML format (list)
+        # Format: [{'bn': '...', 'n': 'soil_moisture', 't': ..., 'v': 25}, ...]
         if 'soil_moisture' in topic or 'temperature' in topic:
-            # Assuming topic structure: farm/field_X/sensor_type
-            # We map this to the correct ID if possible. 
-                       
-            url = f"{self.catalogue_url}devices" if self.catalogue_url.endswith('/') else f"{self.catalogue_url}/devices"
-            try:
-                # Note: In production, don't fetch this every message. Use the cache from __init__.
-                # We use the topic directly to find the owner.
-                parts = topic.split('/')
-                # Heuristic: Check our device_topics or look up in catalogue
-                pass 
-            except:
-                pass
+            # Store the entire SenML list for display later
+            if "field_1" in topic:
+                self.sensor_readings["sensor_node_field_1"] = data
+            elif "field_2" in topic:
+                self.sensor_readings["sensor_node_field_2"] = data
+            return
 
-            # reverse lookup on setup:
-            for d_id, d_topic in self.device_topics.items():
-                pass 
-                # This logic is for actuators. Sensors are harder.
-            
-            # FALLBACK: Just assume the payload has 'bn' (SenML) or we map manually
-            # For this script, let's map: 
-            if "field_1" in topic: self.sensor_readings["sensor_node_field_1"] = data
-            elif "field_2" in topic: self.sensor_readings["sensor_node_field_2"] = data
-
-        # 2. Handle Weather Alerts (Existing logic)
-        if topic == 'weather/alert':
+        # 2. Handle Weather Alerts (dict format)
+        if topic == 'weather/alert' and isinstance(data, dict):
             status = data.get('status', '')
             rain_mm = data.get('precipitation_mm', 0)
             if status == 'ACTIVE':
-                msg = f"RAIN ALERT!\nExpected: {rain_mm}mm\nIrrigation suspended."
+                msg = f"🌧️ RAIN ALERT!\nExpected: {rain_mm}mm\nIrrigation suspended."
             else:
-                msg = f"Rain alert cleared.\nIrrigation resumed."
+                msg = f"☀️ Rain alert cleared.\nIrrigation resumed."
             self.send_broadcast(msg)
 
     def send_broadcast(self, text):
