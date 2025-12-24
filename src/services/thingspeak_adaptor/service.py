@@ -9,7 +9,12 @@ import json
 
 
 class ThingSpeakAdaptor:
-    """ThingSpeak Adaptor following professor's simple pattern."""
+    """
+    ThingSpeak Adaptor - Cloud Data Upload Service
+    
+    Subscribes to sensor and resource usage topics.
+    Uploads soil moisture, temperature, water usage, and energy consumption to ThingSpeak.
+    """
     
     API_URL = "https://api.thingspeak.com/update"
     
@@ -27,16 +32,23 @@ class ThingSpeakAdaptor:
         self.api_key = thingspeak.get('write_api_key', '')
         self.channel_id = thingspeak.get('channel_id', '')
         
-        # Field mapping: sensor_id -> field number
+        # Field mapping: data_key -> field number
         self.field_map = thingspeak.get('field_map', {
             'soil_moisture': 'field1',
-            'temperature': 'field2'
+            'temperature': 'field2',
+            'water_liters': 'field3',
+            'energy_kwh': 'field4'
         })
         
         if not self.api_key:
             print("[ThingSpeak] WARNING: No API key configured!")
         
         print(f"[ThingSpeak] Channel: {self.channel_id}")
+        print(f"[ThingSpeak] Field mapping: {self.field_map}")
+        
+        # Get resource usage topic from config
+        topics_config = data.get('topics', {})
+        self.topic_resource = topics_config.get('resource_usage', 'irrigation/resource_usage')
         
         # Find sensor topics
         self.sensor_topics = []
@@ -63,13 +75,14 @@ class ThingSpeakAdaptor:
         except:
             return
         
-        # Extract sensor values from SenML format
+        # Extract values from SenML format
         if 'v' in data:
             values = data['v']
             if isinstance(values, dict):
-                # Buffer the values
+                # Buffer all values (sensor data or resource usage)
                 for key, val in values.items():
-                    self.buffer[key] = val
+                    if key in self.field_map:
+                        self.buffer[key] = val
                 
                 # Push to ThingSpeak (rate limited)
                 self.push_to_cloud()
@@ -106,12 +119,17 @@ class ThingSpeakAdaptor:
             print(f"[ThingSpeak] Error: {e}")
 
     def run(self):
-        """Subscribe to sensor topics and run forever."""
+        """Subscribe to sensor and resource topics and run forever."""
+        # Subscribe to sensor topics
         for topic in self.sensor_topics:
             self.client.subscribe(topic, qos=0)
-            print(f"[ThingSpeak] Subscribed to {topic}")
+            print(f"[ThingSpeak] Subscribed to sensor: {topic}")
         
-        print("[ThingSpeak] Running... forwarding sensor data to cloud")
+        # Subscribe to resource usage topic (water/energy from actuators)
+        self.client.subscribe(self.topic_resource, qos=0)
+        print(f"[ThingSpeak] Subscribed to resource: {self.topic_resource}")
+        
+        print("[ThingSpeak] Running... forwarding data to cloud")
         
         while True:
             time.sleep(1)
