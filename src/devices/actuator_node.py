@@ -24,14 +24,19 @@ class ActuatorNode:
     Actuator Node - Controls Solenoid Valves and Water Pump
     
     Subscribes to command topic and simulates valve operation.
-    Publishes status updates when state changes.
+    Publishes status updates and water/energy consumption when state changes.
     """
+    
+    # Simulation constants
+    FLOW_RATE_LPM = 10.0      # Liters per minute (default)
+    PUMP_POWER_KW = 0.5       # Pump power in kilowatts
     
     def __init__(self, catalogue_url, device_id):
         self.catalogue_url = catalogue_url
         self.device_id = device_id
         self.is_open = False
         self.last_command_time = None
+        self.current_duration = 0
         
         # 1. Bootstrap: Get config from Catalogue
         print(f"[Actuator {device_id}] Fetching config from {catalogue_url}...")
@@ -41,6 +46,16 @@ class ActuatorNode:
         # Get broker info
         self.broker = data['broker']['address']
         self.port = data['broker']['port']
+        
+        # Get field-specific config (for flow rate)
+        field_id = '_'.join(device_id.split('_')[-2:])  # e.g., "field_1"
+        fields_config = data.get('fields', {})
+        field_config = fields_config.get(field_id, {})
+        self.flow_rate = field_config.get('flow_rate_lpm', self.FLOW_RATE_LPM)
+        
+        # Get resource monitoring topic
+        topics_config = data.get('topics', {})
+        self.topic_resource = topics_config.get('resource_usage', 'irrigation/resource_usage')
         
         # 2. Find my device configuration in the list
         my_device = None
@@ -127,6 +142,7 @@ class ActuatorNode:
         if not self.is_open:
             self.is_open = True
             self.last_command_time = time.time()
+            self.current_duration = duration
             
             print("=" * 50)
             print(f"[Actuator {self.device_id}] >>> VALVE OPENED <<<")
@@ -140,18 +156,50 @@ class ActuatorNode:
             print(f"[Actuator {self.device_id}] Valve already open")
 
     def close_valve(self):
-        """Simulate closing the valve."""
+        """Simulate closing the valve and calculate resource usage."""
         if self.is_open:
             self.is_open = False
             
+            # Calculate actual duration and resource consumption
+            actual_duration = time.time() - self.last_command_time if self.last_command_time else 0
+            
+            # Calculate water usage: flow_rate (L/min) * duration (min)
+            water_liters = (self.flow_rate * actual_duration) / 60.0
+            
+            # Calculate energy usage: power (kW) * duration (hours)
+            energy_kwh = (self.PUMP_POWER_KW * actual_duration) / 3600.0
+            
             print("=" * 50)
             print(f"[Actuator {self.device_id}] >>> VALVE CLOSED <<<")
+            print(f"[Actuator {self.device_id}] Duration: {actual_duration:.1f}s")
+            print(f"[Actuator {self.device_id}] Water used: {water_liters:.2f} liters")
+            print(f"[Actuator {self.device_id}] Energy used: {energy_kwh:.4f} kWh")
             print("=" * 50)
             
             # Publish status update
-            self.publish_status("CLOSED")
+            self.publish_status("CLOSED", actual_duration)
+            
+            # Publish resource usage for ThingSpeak
+            self.publish_resource_usage(water_liters, energy_kwh, actual_duration)
         else:
             print(f"[Actuator {self.device_id}] Valve already closed")
+
+    def publish_resource_usage(self, water_liters, energy_kwh, duration):
+        """Publish water and energy consumption for ThingSpeak."""
+        msg = {
+            'bn': self.device_id,
+            'n': 'resource_usage',
+            't': time.time(),
+            'v': {
+                'water_liters': round(water_liters, 2),
+                'energy_kwh': round(energy_kwh, 4),
+                'duration_s': round(duration, 1)
+            }
+        }
+        
+        # Publish to resource topic
+        self.client.publish(self.topic_resource, json.dumps(msg))
+        print(f"[Actuator {self.device_id}] Published resource usage: {water_liters:.2f}L, {energy_kwh:.4f}kWh")
 
     def publish_status(self, status, duration=0):
         """Publish current valve status to the status topic."""
