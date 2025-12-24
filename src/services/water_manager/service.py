@@ -59,8 +59,8 @@ class WaterManager:
         
         # Get MQTT topics from config (NO HARDCODING!)
         topics = data.get('topics', {})
-        self.topic_weather_alert = topics.get('weather_alert', 'weather/alert')
-        self.topic_frost_alert = topics.get('frost_alert', 'weather/frost')
+        self.topic_weather_alert = topics.get('weather_alert', 'smart_irrigation/weather/alert')
+        self.topic_frost_alert = topics.get('frost_alert', 'smart_irrigation/weather/frost')
         
         # Get field configurations for smart irrigation
         self.fields_config = data.get('fields', {})
