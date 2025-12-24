@@ -9,7 +9,14 @@ import json
 
 
 class WaterManager:
-    """Controller following Controller.py pattern."""
+    """
+    Water Manager - Irrigation Controller
+    
+    Subscribes to sensor data and weather alerts.
+    Decides when to irrigate based on soil moisture and weather conditions.
+    
+    All MQTT topics are dynamically loaded from Catalogue.
+    """
     
     def __init__(self, catalogue_url):
         # 1. Bootstrap: Get config from Catalogue
@@ -17,11 +24,23 @@ class WaterManager:
         res = requests.get(catalogue_url)
         data = res.json()
         
+        # Get broker info
         self.broker = data['broker']['address']
         self.port = data['broker']['port']
-        self.threshold = data['settings'].get('moisture_threshold', 30.0)
         
-        # Find all sensor topics
+        # Get settings
+        settings = data.get('settings', {})
+        self.moisture_threshold = settings.get('moisture_threshold', 30.0)
+        
+        # Get MQTT topics from config (NO HARDCODING!)
+        topics = data.get('topics', {})
+        self.topic_weather_alert = topics.get('weather_alert', 'weather/alert')
+        self.topic_frost_alert = topics.get('frost_alert', 'weather/frost')
+        
+        print(f"[WaterManager] Moisture threshold: {self.moisture_threshold}%")
+        print(f"[WaterManager] Alert topics: rain={self.topic_weather_alert}, frost={self.topic_frost_alert}")
+        
+        # Find all sensor and actuator topics from device list
         self.sensor_topics = {}
         self.actuator_topics = {}
         
@@ -43,9 +62,10 @@ class WaterManager:
         self.client.start()
         time.sleep(1)
         
-        # Memory for latest values (like Controller.py)
+        # Memory for latest values
         self.memory = {}
         self.rain_alert = False
+        self.frost_alert = False
 
     def notify(self, topic, payload):
         """Callback when MQTT message received."""
@@ -53,15 +73,26 @@ class WaterManager:
             data = json.loads(payload)
         except:
             return
-            
-        # Handle weather alerts
-        if topic == 'weather/alert':
+        
+        # Handle weather alerts (rain)
+        if topic == self.topic_weather_alert:
             if data.get('status') == 'ACTIVE':
                 self.rain_alert = True
                 print("[WaterManager] Rain alert ACTIVE - irrigation suspended")
             else:
                 self.rain_alert = False
                 print("[WaterManager] Rain alert cleared")
+            return
+        
+        # Handle frost alerts
+        if topic == self.topic_frost_alert:
+            if data.get('status') == 'ACTIVE':
+                self.frost_alert = True
+                temp = data.get('value', 'N/A')
+                print(f"[WaterManager] Frost alert ACTIVE ({temp}°C) - irrigation suspended")
+            else:
+                self.frost_alert = False
+                print("[WaterManager] Frost alert cleared")
             return
         
         # Handle sensor data
@@ -75,10 +106,11 @@ class WaterManager:
             self.evaluate(device_id, moisture)
 
     def evaluate(self, device_id, moisture):
-        """Decision logic: irrigate if moisture < threshold AND no rain."""
-        needs_water = moisture < self.threshold
+        """Decision logic: irrigate if moisture < threshold AND no weather alerts."""
+        needs_water = moisture < self.moisture_threshold
+        weather_ok = not self.rain_alert and not self.frost_alert
         
-        if needs_water and not self.rain_alert:
+        if needs_water and weather_ok:
             # Find field from device_id (e.g., sensor_node_field_1 -> field_1)
             parts = device_id.split('_')
             if len(parts) >= 3:
@@ -97,6 +129,9 @@ class WaterManager:
         elif needs_water and self.rain_alert:
             print(f"[WaterManager] Low moisture but rain expected - SKIPPING irrigation")
         
+        elif needs_water and self.frost_alert:
+            print(f"[WaterManager] Low moisture but frost detected - SKIPPING irrigation")
+        
         else:
             print(f"[WaterManager] Moisture OK ({moisture}%) - no action needed")
 
@@ -107,7 +142,8 @@ class WaterManager:
             self.client.subscribe(topic, qos=0)
         
         # Subscribe to weather alerts
-        self.client.subscribe('weather/alert', qos=1)
+        self.client.subscribe(self.topic_weather_alert, qos=1)
+        self.client.subscribe(self.topic_frost_alert, qos=1)
         
         print("[WaterManager] Running... waiting for sensor data")
         
