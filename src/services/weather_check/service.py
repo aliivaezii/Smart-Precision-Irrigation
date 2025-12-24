@@ -41,8 +41,8 @@ class WeatherCheck:
         
         # Get MQTT topics from config (NO HARDCODING!)
         topics = data.get('topics', {})
-        self.topic_weather_alert = topics.get('weather_alert', 'weather/alert')
-        self.topic_frost_alert = topics.get('frost_alert', 'weather/frost')
+        self.topic_weather_alert = topics.get('weather_alert', 'smart_irrigation/weather/alert')
+        self.topic_frost_alert = topics.get('frost_alert', 'smart_irrigation/weather/frost')
         
         print(f"[Weather] Location: ({self.lat}, {self.lon})")
         print(f"[Weather] Rain threshold: {self.rain_threshold}mm")
