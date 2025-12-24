@@ -55,7 +55,7 @@ class ActuatorNode:
         
         # Get resource monitoring topic
         topics_config = data.get('topics', {})
-        self.topic_resource = topics_config.get('resource_usage', 'irrigation/usage')
+        self.topic_resource = topics_config.get('resource_usage', 'smart_irrigation/irrigation/usage')
         
         # 2. Find my device configuration in the list
         my_device = None
@@ -272,6 +272,7 @@ class ActuatorNode:
             self.close_valve()
         self.client.stop()
         print(f"[Actuator {self.device_id}] Stopped")
+
 
 
 if __name__ == '__main__':
