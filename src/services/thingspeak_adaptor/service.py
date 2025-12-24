@@ -48,7 +48,7 @@ class ThingSpeakAdaptor:
         
         # Get resource usage topic from config
         topics_config = data.get('topics', {})
-        self.topic_resource = topics_config.get('resource_usage', 'irrigation/resource_usage')
+        self.topic_resource = topics_config.get('resource_usage', 'irrigation/usage')
         
         # Find sensor topics
         self.sensor_topics = []
@@ -75,16 +75,30 @@ class ThingSpeakAdaptor:
         except:
             return
         
-        # Extract values from SenML format
-        if 'v' in data:
+        # Handle SenML format (list of measurements)
+        # Format: [{'bn': '...', 'n': 'soil_moisture', 't': ..., 'v': 25}, ...]
+        if isinstance(data, list):
+            for measurement in data:
+                if 'n' in measurement and 'v' in measurement:
+                    name = measurement['n']
+                    value = measurement['v']
+                    
+                    # Map measurement name to field
+                    if name in self.field_map:
+                        self.buffer[name] = value
+                        print(f"[ThingSpeak] Buffered: {name}={value}")
+            
+            # Push to ThingSpeak (rate limited)
+            self.push_to_cloud()
+            return
+        
+        # Fallback: Handle old dict format (backward compatibility)
+        if isinstance(data, dict) and 'v' in data:
             values = data['v']
             if isinstance(values, dict):
-                # Buffer all values (sensor data or resource usage)
                 for key, val in values.items():
                     if key in self.field_map:
                         self.buffer[key] = val
-                
-                # Push to ThingSpeak (rate limited)
                 self.push_to_cloud()
 
     def push_to_cloud(self):
