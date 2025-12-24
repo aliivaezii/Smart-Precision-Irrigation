@@ -52,7 +52,7 @@ The **Smart Precision Irrigation System** is an IoT-based microservices platform
 │           ▼                      │                      │                       │
 │  ┌─────────────────────────────────────────────────────────────────────┐        │
 │  │                        MQTT BROKER                                   │        │
-│  │                    (test.mosquitto.org:1883)                         │        │
+│  │                    (broker.hivemq.com:1883)                          │        │
 │  └───────────────────────────────▲─────────────────────────────────────┘        │
 │                                  │                                              │
 │  ┌────────┬──────────────────────┼──────────────────────┬────────┐              │
@@ -284,8 +284,8 @@ energy_kwh = (PUMP_POWER_KW * duration_sec) / 3600.0
     "name": "Field 1 Valve",
     "type": "actuator",
     "topics": {
-        "subscribe": ["farm/field_1/valve_cmd"],
-        "publish": ["farm/field_1/valve_status"]
+        "subscribe": ["smart_irrigation/farm/field_1/valve_cmd"],
+        "publish": ["smart_irrigation/farm/field_1/valve_status"]
     }
 }
 
@@ -397,8 +397,8 @@ ELSE IF temperature >= frost_threshold_c AND frost_alert IS active THEN
         "frost_threshold_c": 2.0
     },
     "topics": {
-        "weather_alert": "weather/alert",
-        "frost_alert": "weather/frost"
+        "weather_alert": "smart_irrigation/weather/alert",
+        "frost_alert": "smart_irrigation/weather/frost"
     }
 }
 ```
@@ -406,7 +406,7 @@ ELSE IF temperature >= frost_threshold_c AND frost_alert IS active THEN
 **Communication**:
 - **REST** → Catalogue (bootstrap)
 - **REST** → Open-Meteo API (weather data)
-- **MQTT Publish** → `weather/alert`, `weather/frost`
+- **MQTT Publish** → `smart_irrigation/weather/alert`, `smart_irrigation/weather/frost`
 
 **Alert Formats**:
 ```json
@@ -761,17 +761,21 @@ Open-Meteo API           Weather Check           Water Manager          Telegram
 {
     "project_info": {
         "name": "Smart Precision Irrigation System",
-        "version": "2.0"
+        "version": "2.0",
+        "topic_prefix": "smart_irrigation"
     },
     "broker": {
-        "address": "test.mosquitto.org",
-        "port": 1883
+        "address": "broker.hivemq.com",
+        "port": 1883,
+        "port_tls": 8883,
+        "port_websocket": 8000,
+        "port_websocket_tls": 8884
     },
     "topics": {
-        "weather_alert": "weather/alert",
-        "frost_alert": "weather/frost",
-        "irrigation_command": "irrigation/+/command",
-        "resource_usage": "irrigation/usage"
+        "weather_alert": "smart_irrigation/weather/alert",
+        "frost_alert": "smart_irrigation/weather/frost",
+        "irrigation_command": "smart_irrigation/irrigation/+/command",
+        "resource_usage": "smart_irrigation/irrigation/usage"
     },
     "settings": {
         "lat": 45.06,
@@ -814,8 +818,8 @@ Open-Meteo API           Weather Check           Water Manager          Telegram
             "name": "Field 1 Soil Moisture Sensor",
             "type": "sensor",
             "topics": {
-                "publish": ["farm/field_1/soil_moisture", "farm/field_1/temperature"],
-                "subscribe": ["farm/field_1/config"]
+                "publish": ["smart_irrigation/farm/field_1/soil_moisture", "smart_irrigation/farm/field_1/temperature"],
+                "subscribe": ["smart_irrigation/farm/field_1/config"]
             }
         },
         {
@@ -823,8 +827,8 @@ Open-Meteo API           Weather Check           Water Manager          Telegram
             "name": "Field 1 Irrigation Valve",
             "type": "actuator",
             "topics": {
-                "publish": ["farm/field_1/valve_status"],
-                "subscribe": ["farm/field_1/valve_cmd"]
+                "publish": ["smart_irrigation/farm/field_1/valve_status"],
+                "subscribe": ["smart_irrigation/farm/field_1/valve_cmd"]
             }
         }
     ]
@@ -835,8 +839,9 @@ Open-Meteo API           Weather Check           Water Manager          Telegram
 
 | Parameter | Description | Default |
 |-----------|-------------|---------|
-| `broker.address` | MQTT broker hostname | test.mosquitto.org |
+| `broker.address` | MQTT broker hostname | broker.hivemq.com |
 | `broker.port` | MQTT broker port | 1883 |
+| `broker.port_tls` | MQTT TLS port | 8883 |
 | `settings.moisture_threshold` | Irrigation trigger level (%) | 30.0 |
 | `settings.rain_threshold_mm` | Rain alert trigger (mm) | 5.0 |
 | `settings.frost_threshold_c` | Frost alert trigger (°C) | 2.0 |
@@ -946,8 +951,11 @@ Returns MQTT broker connection details.
 **Response**:
 ```json
 {
-    "address": "test.mosquitto.org",
-    "port": 1883
+    "address": "broker.hivemq.com",
+    "port": 1883,
+    "port_tls": 8883,
+    "port_websocket": 8000,
+    "port_websocket_tls": 8884
 }
 ```
 
@@ -989,8 +997,8 @@ Register a new device or send heartbeat.
     "name": "Field 1 Valve",
     "type": "actuator",
     "topics": {
-        "subscribe": ["farm/field_1/valve_cmd"],
-        "publish": ["farm/field_1/valve_status"]
+        "subscribe": ["smart_irrigation/farm/field_1/valve_cmd"],
+        "publish": ["smart_irrigation/farm/field_1/valve_status"]
     }
 }
 ```
