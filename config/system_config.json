@@ -26,7 +26,7 @@
         "moisture_threshold": 30.0
     },
     "telegram": {
-        "token": "YOUR_BOT_TOKEN_HERE",
+        "token": "8293162576:AAHf8YIFgKHRXTQf-T6ssh1m8KwImRKk--0",
         "chat_ids": []
     },
     "thingspeak": {
