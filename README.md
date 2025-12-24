@@ -120,7 +120,7 @@ When an actuator closes its valve, it publishes resource usage:
 
 ### Prerequisites
 * Python 3.9 or higher
-* An MQTT Broker (e.g., Mosquitto or test.mosquitto.org)
+* An MQTT Broker (using public HiveMQ broker: `broker.hivemq.com`)
 * Git
 
 ### 1. Clone the Repository
@@ -173,16 +173,24 @@ The system uses `config/system_config.json` for centralized configuration:
 
 ```json
 {
-    "broker": {"address": "test.mosquitto.org", "port": 1883},
+    "project_info": {
+        "topic_prefix": "smart_irrigation"
+    },
+    "broker": {
+        "address": "broker.hivemq.com",
+        "port": 1883,
+        "port_tls": 8883,
+        "port_websocket": 8000
+    },
     "settings": {
         "moisture_threshold": 30.0,
         "rain_threshold_mm": 5.0,
         "frost_threshold_c": 2.0
     },
     "topics": {
-        "weather_alert": "weather/alert",
-        "frost_alert": "weather/frost",
-        "resource_usage": "irrigation/usage"
+        "weather_alert": "smart_irrigation/weather/alert",
+        "frost_alert": "smart_irrigation/weather/frost",
+        "resource_usage": "smart_irrigation/irrigation/usage"
     },
     "fields": {
         "field_1": {"crop_type": "tomato", "field_size_m2": 100, "flow_rate_lpm": 20.0},
@@ -199,11 +207,15 @@ The system uses `config/system_config.json` for centralized configuration:
 }
 ```
 
+> **Note**: All MQTT topics are prefixed with `smart_irrigation/` to avoid collisions on the public HiveMQ broker. You can customize this prefix in `project_info.topic_prefix`.
+
 ---
 
 ## 📚 Documentation
 
 * **[ARCHITECTURE.md](docs/ARCHITECTURE.md)** — Complete technical documentation
+* **[FEATURE_AUDIT.md](docs/FEATURE_AUDIT.md)** — Feature completeness audit report
+* **[PROJECT_REVIEW.md](docs/PROJECT_REVIEW.md)** — Gap analysis and implementation status
 
 ---
 
@@ -222,4 +234,3 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 *Last Updated: December 2024*  
 *System Version: 2.0*
-
