@@ -30,8 +30,8 @@
         "chat_ids": []
     },
     "thingspeak": {
-        "channel_id": "YOUR_CHANNEL_ID",
-        "write_api_key": "YOUR_WRITE_API_KEY",
+        "channel_id": "3212705",
+        "write_api_key": "2W651DFTOC44IT3R",
         "field_map": {
             "soil_moisture": "field1",
             "temperature": "field2",
