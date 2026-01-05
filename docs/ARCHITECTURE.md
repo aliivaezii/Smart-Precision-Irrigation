@@ -182,10 +182,28 @@ class MyMQTT:
 **Purpose**: Simulates a soil moisture and temperature sensor node.
 
 **Initialization Flow**:
-1. **Bootstrap via REST**: Fetches configuration from Catalogue Service
+1. **Bootstrap via REST GET**: Fetches configuration from Catalogue Service
 2. **Extract MQTT Broker**: Gets broker address and port
 3. **Find Device Config**: Locates its own publish topics from device list
-4. **Start MQTT Client**: Connects to broker for publishing
+4. **Register via REST POST**: Registers itself with the Catalogue
+5. **Start MQTT Client**: Connects to broker for publishing
+
+**Registration (POST /devices)**:
+```python
+def register(self):
+    payload = {
+        "id": self.device_id,
+        "name": self.name,
+        "type": "sensor",
+        "topics": {"publish": self.topics, "subscribe": []}
+    }
+    url = f"{self.catalogue_url}devices"
+    res = requests.post(url, json=payload)
+    result = res.json()
+    print(f"[Sensor {self.device_id}] Registration: {result['status']}")
+```
+
+**Heartbeat**: Sends POST with device ID every ~60 seconds to keep registration alive.
 
 **Data Format (SenML List)**:
 ```json
@@ -195,10 +213,9 @@ class MyMQTT:
 ]
 ```
 
-> **Note**: Each measurement is a separate object in the list with a single `v` value (not nested dict).
-
 **Communication**:
-- **REST** → Catalogue (bootstrap, one-time)
+- **REST GET** → Catalogue (bootstrap)
+- **REST POST** → Catalogue (registration + heartbeat)
 - **MQTT Publish** → `farm/field_X/soil_moisture`, `farm/field_X/temperature`
 
 ---
@@ -210,10 +227,27 @@ class MyMQTT:
 **Purpose**: Controls solenoid valves and water pump. Tracks resource consumption.
 
 **Initialization Flow**:
-1. **Bootstrap via REST**: Fetches configuration from Catalogue Service
-2. **Register via POST**: Registers itself with the Catalogue dynamically
+1. **Bootstrap via REST GET**: Fetches configuration from Catalogue Service
+2. **Register via REST POST**: Registers itself with the Catalogue
 3. **Extract Field Config**: Gets flow rate from field configuration
 4. **Start MQTT Client**: Connects to broker for command subscription
+
+**Registration (POST /devices)**:
+```python
+def register(self):
+    payload = {
+        "id": self.device_id,
+        "name": self.name,
+        "type": "actuator",
+        "topics": {"subscribe": self.subscribe_topics, "publish": self.publish_topics}
+    }
+    url = f"{self.catalogue_url}devices"
+    res = requests.post(url, json=payload)
+    result = res.json()
+    print(f"[Actuator {self.device_id}] Registration: {result['status']}")
+```
+
+**Heartbeat**: Sends POST with device ID every ~60 seconds to keep registration alive.
 
 **Key Constants**:
 ```python
@@ -1149,5 +1183,5 @@ The combination of REST and MQTT protocols provides the ideal balance between:
 ---
 
 *Document Version: 2.0*  
-*Last Updated: December 2024*  
+*Last Updated: Jan 2026*  
 *System Version: 2.0*
