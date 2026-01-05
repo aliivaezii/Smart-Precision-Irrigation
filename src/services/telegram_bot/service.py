@@ -32,12 +32,12 @@ class TelegramBot():
         self.broker = data['broker']['address']
         self.port = data['broker']['port']
         
-        # Get topics from Catalogue (dynamic, supports any prefix)
+        # Get topics from Catalogue
         topics_config = data.get('topics', {})
         self.topic_weather_alert = topics_config.get('weather_alert', 'smart_irrigation/weather/alert')
         self.topic_frost_alert = topics_config.get('frost_alert', 'smart_irrigation/weather/frost')
         self.topic_irrigation_cmd = topics_config.get('irrigation_command', 'smart_irrigation/irrigation/+/command')
-        self.topic_valve_status = 'smart_irrigation/irrigation/+/status'
+        self.topic_valve_status = topics_config.get('valve_status', 'smart_irrigation/irrigation/+/status')
         
         # Telegram settings
         telegram = data.get('telegram', {})
