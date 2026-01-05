@@ -117,6 +117,41 @@ The system uses **two primary communication methods**:
 | **Commands to Actuators** | ❌ Requires polling | ✅ Instant delivery |
 | **External Cloud APIs** | ✅ Standard HTTP | ❌ Not supported |
 
+### 3.3 MQTT Quality of Service (QoS)
+
+This system uses different QoS levels based on message importance:
+
+| Message Type | QoS | Reason |
+|--------------|-----|--------|
+| **Weather Alerts** | QoS 1 | Critical - must be delivered at least once |
+| **Frost Alerts** | QoS 1 | Critical - crop protection depends on it |
+| **Actuator Commands** | QoS 1 | Important - valve must receive command |
+| **Sensor Data** | QoS 0 | High frequency - occasional loss acceptable |
+
+**QoS Levels Explained:**
+
+- **QoS 0 (At most once)**: Fire and forget. No acknowledgment. Used for frequent sensor readings where losing one reading is not critical.
+
+- **QoS 1 (At least once)**: Guaranteed delivery with acknowledgment. Message may be delivered multiple times. Used for alerts and commands.
+
+**Implementation in Code:**
+
+```python
+# Weather Check - publishes alerts with QoS 1
+self.client.publish(self.topic_weather_alert, json.dumps(msg), qos=1)
+self.client.publish(self.topic_frost_alert, json.dumps(msg), qos=1)
+
+# Water Manager - subscribes to alerts with QoS 1
+self.client.subscribe(self.topic_weather_alert, qos=1)
+self.client.subscribe(self.topic_frost_alert, qos=1)
+
+# Actuator - subscribes to commands with QoS 1
+self.client.subscribe(topic, qos=1)
+
+# Sensor data - uses QoS 0 (high frequency, loss acceptable)
+self.client.publish(topic, json.dumps(msg), qos=0)
+```
+
 ---
 
 ## 4. SenML Message Format
