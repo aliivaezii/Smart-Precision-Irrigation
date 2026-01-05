@@ -59,12 +59,12 @@ class ThingSpeakAdaptor:
         
         print(f"[ThingSpeak] Found {len(self.sensor_topics)} sensor topics")
         
-        # 2. Start MQTT with callback
+        # Start MQTT
         self.client = MyMQTT('thingspeak_adaptor', self.broker, self.port, notifier=self)
         self.client.start()
         time.sleep(1)
         
-        # Buffer for rate limiting (ThingSpeak: 15s between updates)
+        # Buffer for rate limiting
         self.last_update = 0
         self.buffer = {}
 
@@ -102,10 +102,10 @@ class ThingSpeakAdaptor:
                 self.push_to_cloud()
 
     def push_to_cloud(self):
-        """Push buffered data to ThingSpeak (15s rate limit)."""
+        """Push buffered data to ThingSpeak."""
         now = time.time()
         
-        # ThingSpeak rate limit: 15 seconds
+        # Rate limit: 15 seconds between updates
         if now - self.last_update < 15:
             return
         
@@ -114,37 +114,30 @@ class ThingSpeakAdaptor:
         
         # Build request params
         params = {'api_key': self.api_key}
-        
         for key, val in self.buffer.items():
             if key in self.field_map:
                 field = self.field_map[key]
                 params[field] = val
         
         # Send to ThingSpeak
-        try:
-            res = requests.get(self.API_URL, params=params, timeout=10)
-            if res.ok and res.text != '0':
-                print(f"[ThingSpeak] Updated: {self.buffer}")
-                self.last_update = now
-                self.buffer.clear()
-            else:
-                print(f"[ThingSpeak] Failed: {res.text}")
-        except Exception as e:
-            print(f"[ThingSpeak] Error: {e}")
+        res = requests.get(self.API_URL, params=params, timeout=10)
+        if res.ok:
+            print(f"[ThingSpeak] Updated: {self.buffer}")
+            self.last_update = now
+            self.buffer.clear()
+        else:
+            print(f"[ThingSpeak] Failed: {res.text}")
 
     def run(self):
-        """Subscribe to sensor and resource topics and run forever."""
-        # Subscribe to sensor topics
+        """Subscribe to topics and run forever."""
         for topic in self.sensor_topics:
             self.client.subscribe(topic, qos=0)
             print(f"[ThingSpeak] Subscribed to sensor: {topic}")
         
-        # Subscribe to resource usage topic (water/energy from actuators)
         self.client.subscribe(self.topic_resource, qos=0)
         print(f"[ThingSpeak] Subscribed to resource: {self.topic_resource}")
         
-        print("[ThingSpeak] Running... forwarding data to cloud")
-        
+        print("[ThingSpeak] Running...")
         while True:
             time.sleep(1)
 
