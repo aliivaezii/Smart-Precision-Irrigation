@@ -847,6 +847,7 @@ Open-Meteo API           Weather Check           Water Manager          Telegram
         "weather_alert": "smart_irrigation/weather/alert",
         "frost_alert": "smart_irrigation/weather/frost",
         "irrigation_command": "smart_irrigation/irrigation/+/command",
+        "valve_status": "smart_irrigation/irrigation/+/status",
         "resource_usage": "smart_irrigation/irrigation/usage"
     },
     "settings": {
@@ -1223,3 +1224,4 @@ The combination of REST and MQTT protocols provides the ideal balance between:
 *Document Version: 2.0*  
 *Last Updated: December 2024*  
 *System Version: 2.0*
+
