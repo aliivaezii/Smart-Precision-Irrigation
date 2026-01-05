@@ -17,7 +17,7 @@ Unlike traditional timer-based systems, this platform employs a **Microservices 
 * **Resource Tracking:** Monitors water consumption (L) and energy usage (kWh) per irrigation cycle.
 * **Remote Monitoring:** Real-time alerts and interactive control via a **Telegram Bot**.
 * **Data Analytics:** Uploads sensor data and resource usage to **ThingSpeak** for visualization.
-* **Dynamic Registration:** Devices register with the Catalogue via REST POST (no hardcoding).
+* **Dynamic Registration:** All devices register with the Catalogue via REST POST and send periodic heartbeats.
 
 ---
 
@@ -26,8 +26,8 @@ The software strictly follows **Object-Oriented Programming (OOP)** principles a
 
 ### 1. The Edge Layer (Sensors & Actuators)
 Running on **Raspberry Pi Pico 2 W** microcontrollers:
-* **Sensor Nodes:** Collect Soil Moisture (Capacitive) and Air Temperature (MCP9808).
-* **Actuator Nodes:** Control Solenoid Valves (12V) and the Main Water Pump. Track water/energy usage.
+* **Sensor Nodes:** Collect Soil Moisture and Temperature. Register via POST, send heartbeats.
+* **Actuator Nodes:** Control Solenoid Valves and Water Pump. Track water/energy usage. Register via POST.
 
 ### 2. The Service Layer (Core Logic)
 Running on a **Raspberry Pi 5** Gateway, communicating via **MQTT** and **REST**:
@@ -36,6 +36,26 @@ Running on a **Raspberry Pi 5** Gateway, communicating via **MQTT** and **REST**
 * **Weather-Check:** Background service polling Open-Meteo for rain AND frost forecasts.
 * **Telegram Bot:** Interactive interface with inline keyboard buttons for status and control.
 * **ThingSpeak Adaptor:** Uploads sensor metrics AND resource usage to the cloud.
+
+---
+
+## 📡 Device Registration
+
+Both sensors and actuators register themselves with the Catalogue:
+
+```python
+# POST /devices
+payload = {
+    "id": "sensor_node_field_1",
+    "name": "Field 1 Sensor",
+    "type": "sensor",
+    "topics": {"publish": [...], "subscribe": []}
+}
+res = requests.post(url, json=payload)
+result = res.json()  # {"status": "registered"}
+```
+
+Devices send heartbeats every ~60 seconds to keep registration alive.
 
 ---
 
@@ -230,5 +250,5 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ---
 
-*Last Updated: December 2024*  
+*Last Updated: Jan 2026*  
 *System Version: 2.0*
