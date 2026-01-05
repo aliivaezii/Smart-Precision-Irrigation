@@ -834,6 +834,7 @@ Open-Meteo API           Weather Check           Water Manager          Telegram
     "project_info": {
         "name": "Smart Precision Irrigation System",
         "version": "2.0",
+        "description": "IoT-based precision irrigation platform for smart agriculture",
         "topic_prefix": "smart_irrigation"
     },
     "broker": {
@@ -858,12 +859,12 @@ Open-Meteo API           Weather Check           Water Manager          Telegram
         "moisture_threshold": 30.0
     },
     "telegram": {
-        "token": "YOUR_BOT_TOKEN_HERE",
+        "token": "8293162576:AAHf8YIFgKHRXTQf-T6ssh1m8KwImRKk--0",
         "chat_ids": []
     },
     "thingspeak": {
-        "channel_id": "YOUR_CHANNEL_ID",
-        "write_api_key": "YOUR_WRITE_API_KEY",
+        "channel_id": "3212705",
+        "write_api_key": "2W651DFTOC44IT3R",
         "field_map": {
             "soil_moisture": "field1",
             "temperature": "field2",
@@ -896,12 +897,30 @@ Open-Meteo API           Weather Check           Water Manager          Telegram
             }
         },
         {
+            "id": "sensor_node_field_2",
+            "name": "Field 2 Soil Moisture Sensor",
+            "type": "sensor",
+            "topics": {
+                "publish": ["smart_irrigation/farm/field_2/soil_moisture", "smart_irrigation/farm/field_2/temperature"],
+                "subscribe": ["smart_irrigation/farm/field_2/config"]
+            }
+        },
+        {
             "id": "actuator_valve_1",
             "name": "Field 1 Irrigation Valve",
             "type": "actuator",
             "topics": {
                 "publish": ["smart_irrigation/farm/field_1/valve_status"],
                 "subscribe": ["smart_irrigation/farm/field_1/valve_cmd"]
+            }
+        },
+        {
+            "id": "actuator_valve_2",
+            "name": "Field 2 Irrigation Valve",
+            "type": "actuator",
+            "topics": {
+                "publish": ["smart_irrigation/farm/field_2/valve_status"],
+                "subscribe": ["smart_irrigation/farm/field_2/valve_cmd"]
             }
         }
     ]
@@ -1224,4 +1243,5 @@ The combination of REST and MQTT protocols provides the ideal balance between:
 *Document Version: 2.0*  
 *Last Updated: December 2024*  
 *System Version: 2.0*
+
 
