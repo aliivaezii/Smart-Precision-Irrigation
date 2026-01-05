@@ -16,6 +16,7 @@
         "weather_alert": "smart_irrigation/weather/alert",
         "frost_alert": "smart_irrigation/weather/frost",
         "irrigation_command": "smart_irrigation/irrigation/+/command",
+        "valve_status": "smart_irrigation/irrigation/+/status",
         "resource_usage": "smart_irrigation/irrigation/usage"
     },
     "settings": {
