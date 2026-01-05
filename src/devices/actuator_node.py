@@ -97,22 +97,13 @@ class ActuatorNode:
             "id": self.device_id,
             "name": self.name,
             "type": "actuator",
-            "topics": {
-                "subscribe": self.subscribe_topics,
-                "publish": self.publish_topics
-            }
+            "topics": {"subscribe": self.subscribe_topics, "publish": self.publish_topics}
         }
         
-        try:
-            url = f"{self.catalogue_url}devices"
-            res = requests.post(url, json=payload, timeout=5)
-            if res.ok:
-                result = res.json()
-                print(f"[Actuator {self.device_id}] Registration: {result['status']}")
-            else:
-                print(f"[Actuator {self.device_id}] Registration failed: {res.text}")
-        except Exception as e:
-            print(f"[Actuator {self.device_id}] Registration error: {e}")
+        url = f"{self.catalogue_url}devices"
+        res = requests.post(url, json=payload)
+        result = res.json()
+        print(f"[Actuator {self.device_id}] Registration: {result['status']}")
 
     def notify(self, topic, payload):
         """
@@ -239,30 +230,24 @@ class ActuatorNode:
 
     def heartbeat(self):
         """Send heartbeat to Catalogue (keeps registration alive)."""
-        try:
-            url = f"{self.catalogue_url}devices"
-            payload = {"id": self.device_id}
-            requests.post(url, json=payload, timeout=5)
-        except:
-            pass
+        url = f"{self.catalogue_url}devices"
+        requests.post(url, json={"id": self.device_id})
 
     def run(self):
         """Subscribe to command topics and run forever."""
-        # Subscribe to all command topics
         for topic in self.subscribe_topics:
             self.client.subscribe(topic, qos=1)
             print(f"[Actuator {self.device_id}] Subscribed to {topic}")
         
         print(f"[Actuator {self.device_id}] Running... waiting for commands")
         
-        heartbeat_interval = 60  # seconds
-        last_heartbeat = time.time()
-        
+        count = 0
         while True:
-            # Send periodic heartbeat
-            if time.time() - last_heartbeat > heartbeat_interval:
+            # Heartbeat every 60 iterations (~60s)
+            count += 1
+            if count >= 60:
                 self.heartbeat()
-                last_heartbeat = time.time()
+                count = 0
             
             time.sleep(1)
 
