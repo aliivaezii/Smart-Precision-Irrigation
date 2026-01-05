@@ -35,7 +35,9 @@ class TelegramBot():
         # Get topics from Catalogue (dynamic, supports any prefix)
         topics_config = data.get('topics', {})
         self.topic_weather_alert = topics_config.get('weather_alert', 'smart_irrigation/weather/alert')
+        self.topic_frost_alert = topics_config.get('frost_alert', 'smart_irrigation/weather/frost')
         self.topic_irrigation_cmd = topics_config.get('irrigation_command', 'smart_irrigation/irrigation/+/command')
+        self.topic_valve_status = 'smart_irrigation/irrigation/+/status'
         
         # Telegram settings
         telegram = data.get('telegram', {})
@@ -71,8 +73,10 @@ class TelegramBot():
             
             # Standard system subscriptions (from Catalogue config)
             self.client.subscribe(self.topic_weather_alert, qos=1)
+            self.client.subscribe(self.topic_frost_alert, qos=1)
+            self.client.subscribe(self.topic_valve_status, qos=1)
             self.client.subscribe(self.topic_irrigation_cmd, qos=0)  # Monitor commands
-            print(f"[TelegramBot] Subscribed to: {self.topic_weather_alert}, {self.topic_irrigation_cmd}")
+            print(f"[TelegramBot] Subscribed to: {self.topic_weather_alert}, {self.topic_frost_alert}, {self.topic_valve_status}")
             
             # Dynamic device subscriptions
             for dev in devices:
@@ -246,23 +250,18 @@ class TelegramBot():
 
     def notify(self, topic, payload):
         """MQTT Callback: Store sensor data or handle alerts."""
-        try:
-            data = json.loads(payload)
-        except:
-            return
+        data = json.loads(payload)
         
-        # 1. Handle Sensor Data in SenML format (list)
-        # Format: [{'bn': '...', 'n': 'soil_moisture', 't': ..., 'v': 25}, ...]
-        if 'soil_moisture' in topic or 'temperature' in topic:
-            # Store the entire SenML list for display later
+        # Handle Sensor Data
+        if 'soil_moisture' in topic:
             if "field_1" in topic:
                 self.sensor_readings["sensor_node_field_1"] = data
-            elif "field_2" in topic:
+            if "field_2" in topic:
                 self.sensor_readings["sensor_node_field_2"] = data
             return
 
-        # 2. Handle Weather Alerts (dict format)
-        if topic == self.topic_weather_alert and isinstance(data, dict):
+        # Handle Rain Alerts
+        if topic == self.topic_weather_alert:
             status = data.get('status', '')
             rain_mm = data.get('precipitation_mm', 0)
             if status == 'ACTIVE':
@@ -270,14 +269,52 @@ class TelegramBot():
             else:
                 msg = f"☀️ Rain alert cleared.\nIrrigation resumed."
             self.send_broadcast(msg)
+            return
+
+        # Handle Frost Alerts
+        if topic == self.topic_frost_alert:
+            status = data.get('status', '')
+            temp = data.get('value', 'N/A')
+            if status == 'ACTIVE':
+                msg = f"❄️ FROST ALERT!\nTemperature: {temp}°C\nIrrigation suspended."
+            else:
+                msg = f"🌡️ Frost alert cleared.\nTemperature: {temp}°C"
+            self.send_broadcast(msg)
+            return
+
+        # Handle Valve Status Updates
+        if '/status' in topic:
+            parts = topic.split('/')
+            if len(parts) > 2:
+                field_name = parts[2]
+            else:
+                field_name = 'unknown'
+            
+            valve_status = None
+            duration = 0
+            water_liters = 0
+            
+            for m in data:
+                if m.get('n') == 'valve_status':
+                    valve_status = m.get('v')
+                if m.get('n') == 'duration':
+                    duration = m.get('v', 0)
+                if m.get('n') == 'water_liters':
+                    water_liters = m.get('v', 0)
+            
+            if valve_status == 'OPEN':
+                msg = f"💧 Irrigation Started\nField: {field_name}\nDuration: {duration}s"
+                self.send_broadcast(msg)
+            
+            if valve_status == 'CLOSED':
+                if water_liters > 0:
+                    msg = f"✅ Irrigation Complete\nField: {field_name}\nWater used: {water_liters:.1f}L"
+                    self.send_broadcast(msg)
 
     def send_broadcast(self, text):
         """Send message to all configured chats."""
         for chat_id in self.chat_ids:
-            try:
-                self.bot.sendMessage(chat_id, text)
-            except Exception as e:
-                print(f"[TelegramBot] Error sending to {chat_id}: {e}")
+            self.bot.sendMessage(chat_id, text)
 
     def run(self):
         """Main loop."""
