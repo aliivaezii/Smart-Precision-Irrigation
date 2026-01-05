@@ -526,16 +526,19 @@ if isinstance(data, list):
 - `weather/alert` — Rain warnings
 - `weather/frost` — Frost warnings
 - `farm/field_X/soil_moisture` — Sensor data caching
+- `irrigation/+/status` — Valve status updates (irrigation start/stop)
 
 **Notification Examples**:
 - 🌧️ "RAIN ALERT! Expected: 8.5mm. Irrigation suspended."
 - ❄️ "FROST ALERT! Temperature: -2°C. Irrigation suspended."
 - ☀️ "Rain alert cleared. Irrigation resumed."
+- 💧 "Irrigation Started. Field: field_1. Duration: 300s"
+- ✅ "Irrigation Complete. Field: field_1. Water used: 50.0L"
 
 **Communication**:
 - **REST** → Catalogue (bootstrap)
 - **REST** → Telegram Bot API (send messages)
-- **MQTT Subscribe** → `weather/alert`, `weather/frost`, `farm/+/soil_moisture`
+- **MQTT Subscribe** → `weather/alert`, `weather/frost`, `farm/+/soil_moisture`, `irrigation/+/status`
 - **MQTT Publish** → `farm/field_X/valve_cmd`
 
 ---
@@ -951,7 +954,7 @@ irrigation/
 | `farm/field_X/soil_moisture` | Sensor Node | Water Manager, ThingSpeak | SenML list | 0 |
 | `farm/field_X/temperature` | Sensor Node | ThingSpeak | SenML list | 0 |
 | `farm/field_X/valve_cmd` | Water Manager, Telegram | Actuator | Command JSON | 0 |
-| `farm/field_X/valve_status` | Actuator | — | SenML list | 0 |
+| `farm/field_X/valve_status` | Actuator | Telegram | SenML list | 0 |
 | `weather/alert` | Weather Check | Water Manager, Telegram | Alert JSON | 1 |
 | `weather/frost` | Weather Check | Water Manager, Telegram | Alert JSON | 1 |
 | `irrigation/usage` | Actuator | ThingSpeak | SenML list | 0 |
@@ -1218,5 +1221,5 @@ The combination of REST and MQTT protocols provides the ideal balance between:
 ---
 
 *Document Version: 2.0*  
-*Last Updated: Jan 2026*  
+*Last Updated: December 2024*  
 *System Version: 2.0*
