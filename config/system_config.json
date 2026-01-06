@@ -1,7 +1,7 @@
 {
     "project_info": {
         "name": "Smart Precision Irrigation System",
-        "version": "2.0",
+        "version": "2.1",
         "description": "IoT-based precision irrigation platform for smart agriculture",
         "topic_prefix": "smart_irrigation"
     },
@@ -11,6 +11,16 @@
         "port_tls": 8883,
         "port_websocket": 8000,
         "port_websocket_tls": 8884
+    },
+    "services": {
+        "catalogue": {
+            "host": "localhost",
+            "port": 8080
+        },
+        "status_service": {
+            "host": "localhost",
+            "port": 9090
+        }
     },
     "topics": {
         "weather_alert": "smart_irrigation/weather/alert",
