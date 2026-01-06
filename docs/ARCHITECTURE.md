@@ -13,6 +13,7 @@
 10. [Configuration](#10-configuration)
 11. [MQTT Topics](#11-mqtt-topics)
 12. [REST API Endpoints](#12-rest-api-endpoints)
+13. [Services Port Reference](#13-services-port-reference)
 
 ---
 
@@ -22,11 +23,13 @@ The **Smart Precision Irrigation System** is an IoT-based microservices platform
 
 ### Key Objectives:
 - **Smart Water Management**: Irrigate based on crop type, field size, and moisture deficit
+- **Gravity-Fed Irrigation**: Utilizes elevated water tanks for energy-efficient water delivery
 - **Weather-Aware**: Cancel irrigation if rain OR frost is predicted
-- **Resource Tracking**: Monitor water (L) and energy (kWh) consumption per cycle
-- **Real-time Monitoring**: Telegram notifications with interactive controls
-- **Cloud Analytics**: ThingSpeak integration for sensor and usage data visualization
+- **Resource Tracking**: Monitor water consumption (L) per irrigation cycle
+- **Real-time Monitoring**: Telegram notifications with system status viewing
+- **Cloud Analytics**: ThingSpeak integration for sensor data visualization
 - **Dynamic Registration**: Devices register via REST POST (no hardcoding)
+- **Centralized Status**: Status Service provides unified device state access
 
 ---
 
@@ -48,7 +51,7 @@ The **Smart Precision Irrigation System** is an IoT-based microservices platform
 │  │  Weather Check  │    │ThingSpeak Adaptor│   │   Telegram Bot  │              │
 │  │    Service      │    │     Service      │    │     Service     │              │
 │  └────────┬────────┘    └────────▲────────┘    └────────▲────────┘              │
-│           │ MQTT                 │ MQTT                 │ MQTT                  │
+│           │ MQTT                 │ MQTT                 │ MQTT + REST           │
 │           ▼                      │                      │                       │
 │  ┌─────────────────────────────────────────────────────────────────────┐        │
 │  │                        MQTT BROKER                                   │        │
@@ -59,16 +62,16 @@ The **Smart Precision Irrigation System** is an IoT-based microservices platform
 │  │        │ MQTT                 │ MQTT                 │ MQTT   │              │
 │  │        ▼                      ▼                      ▼        │              │
 │  │  ┌───────────┐         ┌───────────────┐      ┌───────────┐   │              │
-│  │  │Water      │◄────────│  Catalogue    │◄─────│  Sensor   │   │              │
-│  │  │Manager    │  REST   │   Service     │ REST │   Node    │   │              │
-│  │  │(Controller)│        │  (Registry)   │      │           │   │              │
-│  │  └─────┬─────┘         └───────────────┘      └───────────┘   │              │
-│  │        │ MQTT                   ▲                             │              │
-│  │        ▼                        │ REST                        │              │
-│  │  ┌───────────┐                  │                             │              │
-│  │  │ Actuator  │◄─────────────────┘                             │              │
-│  │  │ (Valve)   │                                                │              │
-│  │  └───────────┘                                                │              │
+│  │  │Water      │◄────────│  Catalogue    │◄─────│  Status   │   │              │
+│  │  │Manager    │  REST   │   Service     │ REST │  Service  │   │              │
+│  │  │(Controller)│        │  (Registry)   │      │  (Cache)  │   │              │
+│  │  └─────┬─────┘         └───────────────┘      └─────▲─────┘   │              │
+│  │        │ MQTT                   ▲                   │ MQTT    │              │
+│  │        ▼                        │ REST              │         │              │
+│  │  ┌───────────┐                  │              ┌────┴────┐    │              │
+│  │  │ Actuator  │◄─────────────────┘              │ Sensor  │    │              │
+│  │  │ (Valve)   │                                 │  Node   │    │              │
+│  │  └───────────┘                                 └─────────┘    │              │
 │  └───────────────────────────────────────────────────────────────┘              │
 └─────────────────────────────────────────────────────────────────────────────────┘
             │
@@ -80,8 +83,14 @@ The **Smart Precision Irrigation System** is an IoT-based microservices platform
 │  │ (Sensor Node)   │                        │ (Actuator Node) │                 │
 │  │                 │                        │                 │                 │
 │  │ • Soil Moisture │                        │ • Solenoid Valve│                 │
-│  │ • Temperature   │                        │ • Water Pump    │                 │
+│  │ • Temperature   │                        │   (Gravity-Fed) │                 │
 │  └─────────────────┘                        └─────────────────┘                 │
+│                                                                                 │
+│  ┌─────────────────────────────────────────────────────────────┐                │
+│  │              GRAVITY-FED WATER TANK (Elevated)              │                │
+│  │  • No pump required - water flows by gravity                │                │
+│  │  • Energy-efficient operation                               │                │
+│  └─────────────────────────────────────────────────────────────┘                │
 └─────────────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -259,7 +268,9 @@ def register(self):
 
 #### `src/devices/actuator_node.py`
 
-**Purpose**: Controls solenoid valves and water pump. Tracks resource consumption.
+**Purpose**: Controls solenoid valves for gravity-fed irrigation. Tracks water consumption.
+
+**System Design**: The system uses gravity-fed irrigation from elevated water tanks. This design eliminates the need for electric pumps, reducing energy consumption and hardware complexity.
 
 **Initialization Flow**:
 1. **Bootstrap via REST GET**: Fetches configuration from Catalogue Service
@@ -286,8 +297,7 @@ def register(self):
 
 **Key Constants**:
 ```python
-FLOW_RATE_LPM = 20.0      # Liters per minute
-PUMP_POWER_KW = 0.75      # Pump power in kilowatts
+FLOW_RATE_LPM = 20.0      # Liters per minute (gravity-fed flow rate)
 ```
 
 **Command Handling**:
@@ -303,14 +313,12 @@ def notify(self, topic, payload):
 **Resource Calculation (on valve close)**:
 ```python
 water_liters = (flow_rate * duration_sec) / 60.0
-energy_kwh = (PUMP_POWER_KW * duration_sec) / 3600.0
 ```
 
 **Published Data (SenML List)**:
 ```json
 [
     {"bn": "actuator_valve_1", "n": "water_liters", "t": 1703419200.0, "v": 10.5},
-    {"bn": "actuator_valve_1", "n": "energy_kwh", "t": 1703419200.0, "v": 0.05},
     {"bn": "actuator_valve_1", "n": "duration_sec", "t": 1703419200.0, "v": 120.0}
 ]
 ```
@@ -500,64 +508,107 @@ ELSE IF temperature >= frost_threshold_c AND frost_alert IS active THEN
 
 #### `src/services/telegram_bot/service.py`
 
-**Purpose**: User notification and control service via Telegram messaging with interactive UI.
+**Purpose**: User notification service via Telegram messaging for weather alerts and system status monitoring.
 
-**Interactive Features**:
+**Features**:
 | Feature | Implementation |
 |---------|----------------|
-| Inline Keyboard Buttons | `InlineKeyboardMarkup` with buttons |
-| Callback Query Handler | `on_callback_query()` method |
-| View Sensors | `menu_sensors` → `show_sensor_detail()` |
-| Control Actuators | `menu_actuators` → `send_actuator_command()` |
-| Main Menu Navigation | `main_menu`, `Back` buttons |
-| MQTT Command Publishing | Sends `OPEN`/`CLOSE` commands |
+| Weather Alerts | Receives rain/frost alerts via MQTT |
+| System Status | Queries Status Service via REST |
+| Interactive Menu | Inline keyboard with `/start` command |
 
-**SenML Display**:
+**Status Retrieval**:
+The Telegram Bot queries the Status Service (port 9090) to display current device states, rather than maintaining its own MQTT subscriptions for all devices.
+
 ```python
-# Parses list format for display
-if isinstance(data, list):
-    for measurement in data:
-        name = measurement.get('n', 'unknown')
-        val = measurement.get('v', 'N/A')
-        lines.append(f"  {name}: **{val}**")
+def show_system_status(self, chat_id):
+    res = requests.get(f"{self.status_service_url}")
+    status_data = res.json()
+    # Format and send to user
 ```
 
 **Monitored Topics**:
 - `weather/alert` — Rain warnings
 - `weather/frost` — Frost warnings
-- `farm/field_X/soil_moisture` — Sensor data caching
-- `irrigation/+/status` — Valve status updates (irrigation start/stop)
 
 **Notification Examples**:
 - 🌧️ "RAIN ALERT! Expected: 8.5mm. Irrigation suspended."
 - ❄️ "FROST ALERT! Temperature: -2°C. Irrigation suspended."
 - ☀️ "Rain alert cleared. Irrigation resumed."
-- 💧 "Irrigation Started. Field: field_1. Duration: 300s"
-- ✅ "Irrigation Complete. Field: field_1. Water used: 50.0L"
 
 **Communication**:
 - **REST** → Catalogue (bootstrap)
+- **REST** → Status Service (device status retrieval)
 - **REST** → Telegram Bot API (send messages)
-- **MQTT Subscribe** → `weather/alert`, `weather/frost`, `farm/+/soil_moisture`, `irrigation/+/status`
-- **MQTT Publish** → `farm/field_X/valve_cmd`
+- **MQTT Subscribe** → `weather/alert`, `weather/frost`
+
+---
+
+#### `src/services/status_service/service.py`
+
+**Purpose**: Centralized device status cache with REST API. Subscribes to all device topics and provides unified access to current device states.
+
+**Technology**: CherryPy REST framework (port 9090)
+
+**Features**:
+- Subscribes to all device publish topics from Catalogue
+- Caches the latest message for each device
+- Exposes cached data via REST API
+- Periodically checks for new devices (every 60 seconds)
+
+**Initialization Flow**:
+1. **Bootstrap via REST GET**: Fetches configuration from Catalogue Service
+2. **Subscribe to Device Topics**: Gets all device publish topics from Catalogue
+3. **Start Background Thread**: Periodically checks for new device registrations
+4. **Expose REST API**: Provides GET endpoint for status retrieval
+
+**REST API**:
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/` | Returns all cached device statuses |
+
+**Response Format**:
+```json
+{
+    "sensor_node_field_1": {
+        "topic": "smart_irrigation/farm/field_1/soil_moisture",
+        "timestamp": 1703419200.0,
+        "received_at": "2026-01-06 10:00:00",
+        "payload": [{"bn": "sensor_node_field_1", "n": "soil_moisture", "v": 45.2}]
+    }
+}
+```
+
+**Benefits**:
+- Other services can query device status without subscribing to all topics
+- Reduces MQTT subscription overhead across services
+- Provides a single source of truth for device states
+- Enables stateless clients (like Telegram Bot) to access device data
+
+**Communication**:
+- **REST GET** → Catalogue (bootstrap + device list)
+- **MQTT Subscribe** → All device publish topics
+- **REST Provider** → Serves device status to other services
 
 ---
 
 #### `src/services/thingspeak_adaptor/service.py`
 
-**Purpose**: Cloud data adaptor for IoT analytics visualization. Uploads sensor data AND resource usage.
+**Purpose**: Cloud data adaptor for IoT analytics visualization. Uploads sensor data from Field 1 to ThingSpeak.
 
 **Target Platform**: ThingSpeak (https://thingspeak.com)
 
 **Features**:
-- Subscribes to all sensor topics AND resource usage topic
+- Subscribes to Field 1 sensor topics
 - Parses SenML list format
 - Buffers incoming data
 - Rate-limited uploads (ThingSpeak requires 15s between updates)
 
+**Field Scope**: The adaptor focuses on Field 1 data to work within ThingSpeak's free tier limitations (8 fields per channel).
+
 **SenML Parsing**:
 ```python
-# Handles list format from sensors and actuators
+# Handles list format from sensors
 if isinstance(data, list):
     for measurement in data:
         name = measurement['n']     # e.g., 'soil_moisture', 'water_liters'
@@ -572,14 +623,14 @@ if isinstance(data, list):
     "soil_moisture": "field1",
     "temperature": "field2",
     "water_liters": "field3",
-    "energy_kwh": "field4"
+    "water_needed": "field4"
 }
 ```
 
 **Communication**:
 - **REST** → Catalogue (bootstrap)
 - **REST** → ThingSpeak API (data upload)
-- **MQTT Subscribe** → `farm/field_X/soil_moisture`, `farm/field_X/temperature`, `irrigation/usage`
+- **MQTT Subscribe** → `farm/field_1/soil_moisture`, `farm/field_1/temperature`, `irrigation/usage`
 
 ---
 
@@ -590,17 +641,21 @@ if isinstance(data, list):
 | Component | REST Provider | REST Consumer | MQTT Publisher | MQTT Subscriber |
 |-----------|:-------------:|:-------------:|:--------------:|:---------------:|
 | **Catalogue Service** | ✅ | ❌ | ❌ | ❌ |
+| **Status Service** | ✅ | ✅ | ❌ | ✅ |
 | **Sensor Node** | ❌ | ✅ | ✅ | ❌ |
 | **Actuator Node** | ❌ | ✅ (POST) | ✅ | ✅ |
 | **Water Manager** | ❌ | ✅ | ✅ | ✅ |
 | **Weather Check** | ❌ | ✅ | ✅ | ❌ |
-| **Telegram Bot** | ❌ | ✅ | ✅ | ✅ |
+| **Telegram Bot** | ❌ | ✅ | ❌ | ✅ |
 | **ThingSpeak Adaptor** | ❌ | ✅ | ❌ | ✅ |
 
 ### Detailed Role Analysis
 
 #### Pure Service Providers:
 - **Catalogue Service**: Provides configuration data and device registration via REST API
+
+#### REST and MQTT Providers:
+- **Status Service**: Provides cached device status via REST, subscribes to all device topics via MQTT
 
 #### Pure Service Consumers:
 - **ThingSpeak Adaptor**: Only consumes data (MQTT) and forwards to cloud
@@ -610,7 +665,7 @@ if isinstance(data, list):
 - **Weather Check**: Consumes external API, provides alerts (rain + frost)
 - **Sensor Node**: Consumes config, provides sensor readings
 - **Actuator Node**: Consumes commands, provides status + resource usage
-- **Telegram Bot**: Consumes alerts + sensor data, provides user commands
+- **Telegram Bot**: Consumes alerts (MQTT) + device status (REST from Status Service), provides user notifications
 
 ---
 
@@ -675,13 +730,12 @@ If field configuration is missing, a simple lookup table is used:
 
 ### 8.1 Overview
 
-The Actuator Node tracks water consumption and energy usage when the valve closes.
+The Actuator Node tracks water consumption when the valve closes. The system uses gravity-fed irrigation from elevated water tanks, eliminating the need for electric pumps.
 
 ### 8.2 Constants
 
 ```python
-FLOW_RATE_LPM = 20.0      # Liters per minute
-PUMP_POWER_KW = 0.75      # Pump power in kilowatts
+FLOW_RATE_LPM = 20.0      # Liters per minute (gravity-fed flow rate)
 ```
 
 ### 8.3 Calculation
@@ -693,11 +747,8 @@ def close_valve(self):
     # Water usage: flow_rate (L/min) * duration (min)
     water_liters = (self.flow_rate * actual_duration) / 60.0
     
-    # Energy usage: power (kW) * duration (hours)
-    energy_kwh = (PUMP_POWER_KW * actual_duration) / 3600.0
-    
     # Publish resource usage
-    self.publish_resource_usage(water_liters, energy_kwh, actual_duration)
+    self.publish_resource_usage(water_liters, actual_duration)
 ```
 
 ### 8.4 Published Data
@@ -705,7 +756,6 @@ def close_valve(self):
 ```json
 [
     {"bn": "actuator_valve_1", "n": "water_liters", "t": 1703419200.0, "v": 10.5},
-    {"bn": "actuator_valve_1", "n": "energy_kwh", "t": 1703419200.0, "v": 0.05},
     {"bn": "actuator_valve_1", "n": "duration_sec", "t": 1703419200.0, "v": 120.0}
 ]
 ```
@@ -717,7 +767,7 @@ def close_valve(self):
 | Soil Moisture | field1 |
 | Temperature | field2 |
 | Water (L) | field3 |
-| Energy (kWh) | field4 |
+| Water Needed (mm) | field4 |
 
 ---
 
@@ -727,16 +777,17 @@ def close_valve(self):
 
 ```
 1. Catalogue Service starts → Exposes REST API on port 8080
-2. Other services start → Each fetches config via GET http://localhost:8080/
-3. Actuator Nodes register → POST to http://localhost:8080/devices
-4. Services extract:
+2. Status Service starts → Exposes REST API on port 9090, subscribes to all device topics
+3. Other services start → Each fetches config via GET http://localhost:8080/
+4. Actuator Nodes register → POST to http://localhost:8080/devices
+5. Services extract:
    - MQTT broker address/port
    - Device configurations
    - Field configurations (crop type, size)
    - Thresholds and settings
-5. Services connect to MQTT broker
-6. Services subscribe to relevant topics
-7. System enters operational mode
+6. Services connect to MQTT broker
+7. Services subscribe to relevant topics
+8. System enters operational mode
 ```
 
 ### 9.2 Smart Irrigation Decision Flow
@@ -780,13 +831,13 @@ Actuator Node                ThingSpeak Adaptor            ThingSpeak Cloud
     │                             │                             │
     │ MQTT: irrigation/usage      │                             │
     │ [{'n':'water_liters','v':270},                            │
-    │  {'n':'energy_kwh','v':0.17}]│                            │
+    │  {'n':'duration_sec','v':810}]                            │
     ├────────────────────────────►│                             │
     │                             │ Parse SenML list            │
-    │                             │ Buffer: water=270, energy=0.17
+    │                             │ Buffer: water=270           │
     │                             │                             │
     │                             │ REST: ThingSpeak API        │
-    │                             │ ?field3=270&field4=0.17     │
+    │                             │ ?field3=270                 │
     │                             ├────────────────────────────►│
     │                             │                             │ Stores data
 ```
@@ -834,7 +885,6 @@ Open-Meteo API           Weather Check           Water Manager          Telegram
     "project_info": {
         "name": "Smart Precision Irrigation System",
         "version": "2.0",
-        "description": "IoT-based precision irrigation platform for smart agriculture",
         "topic_prefix": "smart_irrigation"
     },
     "broker": {
@@ -859,17 +909,17 @@ Open-Meteo API           Weather Check           Water Manager          Telegram
         "moisture_threshold": 30.0
     },
     "telegram": {
-        "token": "8293162576:AAHf8YIFgKHRXTQf-T6ssh1m8KwImRKk--0",
+        "token": "YOUR_BOT_TOKEN_HERE",
         "chat_ids": []
     },
     "thingspeak": {
-        "channel_id": "3212705",
-        "write_api_key": "2W651DFTOC44IT3R",
+        "channel_id": "YOUR_CHANNEL_ID",
+        "write_api_key": "YOUR_WRITE_API_KEY",
         "field_map": {
             "soil_moisture": "field1",
             "temperature": "field2",
             "water_liters": "field3",
-            "energy_kwh": "field4"
+            "water_needed": "field4"
         }
     },
     "fields": {
@@ -897,30 +947,12 @@ Open-Meteo API           Weather Check           Water Manager          Telegram
             }
         },
         {
-            "id": "sensor_node_field_2",
-            "name": "Field 2 Soil Moisture Sensor",
-            "type": "sensor",
-            "topics": {
-                "publish": ["smart_irrigation/farm/field_2/soil_moisture", "smart_irrigation/farm/field_2/temperature"],
-                "subscribe": ["smart_irrigation/farm/field_2/config"]
-            }
-        },
-        {
             "id": "actuator_valve_1",
             "name": "Field 1 Irrigation Valve",
             "type": "actuator",
             "topics": {
                 "publish": ["smart_irrigation/farm/field_1/valve_status"],
                 "subscribe": ["smart_irrigation/farm/field_1/valve_cmd"]
-            }
-        },
-        {
-            "id": "actuator_valve_2",
-            "name": "Field 2 Irrigation Valve",
-            "type": "actuator",
-            "topics": {
-                "publish": ["smart_irrigation/farm/field_2/valve_status"],
-                "subscribe": ["smart_irrigation/farm/field_2/valve_cmd"]
             }
         }
     ]
@@ -964,20 +996,20 @@ weather/
 └── frost                # Frost alerts
 │
 irrigation/
-└── usage                # Resource usage (water/energy)
+└── usage                # Resource usage (water consumption)
 ```
 
 ### 11.2 Topic Definitions
 
 | Topic | Publisher | Subscriber | Payload Format | QoS |
 |-------|-----------|------------|----------------|-----|
-| `farm/field_X/soil_moisture` | Sensor Node | Water Manager, ThingSpeak | SenML list | 0 |
-| `farm/field_X/temperature` | Sensor Node | ThingSpeak | SenML list | 0 |
-| `farm/field_X/valve_cmd` | Water Manager, Telegram | Actuator | Command JSON | 0 |
-| `farm/field_X/valve_status` | Actuator | Telegram | SenML list | 0 |
+| `farm/field_X/soil_moisture` | Sensor Node | Water Manager, Status Service, ThingSpeak | SenML list | 0 |
+| `farm/field_X/temperature` | Sensor Node | Status Service, ThingSpeak | SenML list | 0 |
+| `farm/field_X/valve_cmd` | Water Manager | Actuator | Command JSON | 0 |
+| `farm/field_X/valve_status` | Actuator | Status Service | SenML list | 0 |
 | `weather/alert` | Weather Check | Water Manager, Telegram | Alert JSON | 1 |
 | `weather/frost` | Weather Check | Water Manager, Telegram | Alert JSON | 1 |
-| `irrigation/usage` | Actuator | ThingSpeak | SenML list | 0 |
+| `irrigation/usage` | Actuator | Status Service, ThingSpeak | SenML list | 0 |
 
 ### 11.3 Message Formats
 
@@ -1008,7 +1040,7 @@ irrigation/
 ```json
 [
     {"bn": "actuator_valve_1", "n": "water_liters", "t": 1703419200.0, "v": 10.5},
-    {"bn": "actuator_valve_1", "n": "energy_kwh", "t": 1703419200.0, "v": 0.05}
+    {"bn": "actuator_valve_1", "n": "duration_sec", "t": 1703419200.0, "v": 120.0}
 ]
 ```
 
@@ -1152,7 +1184,32 @@ Returns field configurations for smart irrigation.
 }
 ```
 
-### 12.2 External APIs Used
+### 12.2 Status Service API
+
+**Base URL**: `http://localhost:9090`
+
+#### GET /
+Returns all cached device statuses.
+
+**Response**:
+```json
+{
+    "sensor_node_field_1": {
+        "topic": "smart_irrigation/farm/field_1/soil_moisture",
+        "timestamp": 1703419200.0,
+        "received_at": "2026-01-06 10:00:00",
+        "payload": [{"bn": "sensor_node_field_1", "n": "soil_moisture", "v": 45.2}]
+    },
+    "actuator_valve_1": {
+        "topic": "smart_irrigation/farm/field_1/valve_status",
+        "timestamp": 1703419210.0,
+        "received_at": "2026-01-06 10:00:10",
+        "payload": [{"bn": "actuator_valve_1", "n": "valve_state", "v": "OPEN"}]
+    }
+}
+```
+
+### 12.3 External APIs Used
 
 | API | Base URL | Purpose |
 |-----|----------|---------|
@@ -1162,7 +1219,19 @@ Returns field configurations for smart irrigation.
 
 ---
 
-## 13. Dependencies
+## 13. Services Port Reference
+
+| Service | Port | Protocol | Description |
+|---------|------|----------|-------------|
+| Catalogue Service | 8080 | HTTP/REST | Configuration and device registry |
+| Status Service | 9090 | HTTP/REST | Cached device status API |
+| MQTT Broker | 1883 | MQTT | Message broker (HiveMQ) |
+| MQTT TLS | 8883 | MQTT/TLS | Secure MQTT connection |
+| MQTT WebSocket | 8000 | WebSocket | WebSocket MQTT connection |
+
+---
+
+## 14. Dependencies
 
 ### Python Packages
 
@@ -1170,14 +1239,14 @@ Returns field configurations for smart irrigation.
 |---------|---------|---------|
 | `paho-mqtt` | ≥1.6.1 | MQTT client library |
 | `requests` | ≥2.31.0 | HTTP client for REST APIs |
-| `cherrypy` | — | REST API framework (Catalogue) |
+| `cherrypy` | — | REST API framework (Catalogue, Status Service) |
 | `telepot` | — | Telegram Bot integration |
 | `pandas` | ≥2.0.0 | Data processing (optional) |
 | `numpy` | ≥1.24.0 | Numerical operations |
 
 ---
 
-## 14. Running the System
+## 15. Running the System
 
 ### Startup Order
 
@@ -1186,39 +1255,44 @@ Returns field configurations for smart irrigation.
    python src/services/catalogue/service.py
    ```
 
-2. **Weather Check Service**
+2. **Status Service** (must start before Telegram Bot)
+   ```bash
+   python src/services/status_service/service.py
+   ```
+
+3. **Weather Check Service**
    ```bash
    python src/services/weather_check/service.py
    ```
 
-3. **Water Manager Service**
+4. **Water Manager Service**
    ```bash
    python src/services/water_manager/service.py
    ```
 
-4. **Telegram Bot Service**
+5. **Telegram Bot Service**
    ```bash
    python src/services/telegram_bot/service.py
    ```
 
-5. **ThingSpeak Adaptor**
+6. **ThingSpeak Adaptor**
    ```bash
    python src/services/thingspeak_adaptor/service.py
    ```
 
-6. **Sensor Nodes**
+7. **Sensor Nodes**
    ```bash
    python src/devices/sensor_node.py
    ```
 
-7. **Actuator Nodes**
+8. **Actuator Nodes**
    ```bash
    python src/devices/actuator_node.py
    ```
 
 ---
 
-## 15. Summary
+## 16. Summary
 
 The Smart Precision Irrigation System demonstrates a well-architected IoT platform that:
 
@@ -1229,8 +1303,15 @@ The Smart Precision Irrigation System demonstrates a well-architected IoT platfo
 5. **Implements Dynamic Registration**: Devices register via POST (not hardcoded)
 6. **Integrates External APIs**: Weather forecasting (rain + frost) and cloud analytics
 7. **Provides Smart Irrigation**: Crop-type and field-size based duration calculation
-8. **Tracks Resources**: Water consumption (L) and energy usage (kWh)
-9. **Provides Interactive UI**: Telegram bot with inline keyboard buttons
+8. **Tracks Resources**: Water consumption (L) per irrigation cycle
+9. **Provides Weather Alerts**: Telegram bot notifications for rain and frost alerts
+10. **Centralized Status**: Status Service provides unified device state access via REST
+
+### Design Highlights
+
+- **Gravity-Fed Irrigation**: Uses elevated water tanks for energy-efficient water delivery
+- **Status Service Architecture**: Centralized device status cache reduces MQTT subscription overhead
+- **Weather-Aware Control**: Automatic irrigation suspension during rain or frost conditions
 
 The combination of REST and MQTT protocols provides the ideal balance between:
 - **Reliability**: REST for critical configuration and registration
@@ -1240,8 +1321,6 @@ The combination of REST and MQTT protocols provides the ideal balance between:
 
 ---
 
-*Document Version: 2.0*  
-*Last Updated: December 2024*  
-*System Version: 2.0*
-
-
+*Document Version: 2.1*  
+*Last Updated: January 2026*  
+*System Version: 2.1*
