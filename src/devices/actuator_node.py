@@ -1,12 +1,13 @@
 """
-ActuatorNode.py - Solenoid Valve / Water Pump Controller
+ActuatorNode.py - Solenoid Valve Controller
 
-This actor represents physical actuators (valves, pumps) in the irrigation system.
+This actor represents physical valve actuators in a gravity-fed irrigation system.
 It follows the standard course pattern:
 1. __init__: Bootstrap configuration from Catalogue
 2. Register itself with the Catalogue via POST
 3. Subscribe to command topic via MQTT
-4. Simulate valve/pump operation when commands are received
+4. Simulate valve operation when commands are received
+
 """
 
 import sys
@@ -21,15 +22,15 @@ import json
 
 class ActuatorNode:
     """
-    Actuator Node - Controls Solenoid Valves and Water Pump
+    Actuator Node - Controls Solenoid Valves
     
     Subscribes to command topic and simulates valve operation.
-    Publishes status updates and water/energy consumption when state changes.
+    Publishes status updates and water consumption when state changes.
+
     """
     
-    # Simulation constants (as per proposal specifications)
-    FLOW_RATE_LPM = 20.0      # Liters per minute (default)
-    PUMP_POWER_KW = 0.75      # Pump power in kilowatts
+    # Simulation constants
+    FLOW_RATE_LPM = 20.0  # Liters per minute (default)
     
     def __init__(self, catalogue_url, device_id):
         self.catalogue_url = catalogue_url
@@ -147,40 +148,37 @@ class ActuatorNode:
             print(f"[Actuator {self.device_id}] Valve already open")
 
     def close_valve(self):
-        """Simulate closing the valve and calculate resource usage."""
+        """Simulate closing the valve and calculate water usage."""
         if self.is_open:
             self.is_open = False
             
-            # Calculate actual duration and resource consumption
-            actual_duration = time.time() - self.last_command_time if self.last_command_time else 0
+            # Calculate actual duration and water consumption
+            actual_duration = 0
+            if self.last_command_time:
+                actual_duration = time.time() - self.last_command_time
             
             # Calculate water usage: flow_rate (L/min) * duration (min)
             water_liters = (self.flow_rate * actual_duration) / 60.0
-            
-            # Calculate energy usage: power (kW) * duration (hours)
-            energy_kwh = (self.PUMP_POWER_KW * actual_duration) / 3600.0
             
             print("=" * 50)
             print(f"[Actuator {self.device_id}] >>> VALVE CLOSED <<<")
             print(f"[Actuator {self.device_id}] Duration: {actual_duration:.1f}s")
             print(f"[Actuator {self.device_id}] Water used: {water_liters:.2f} liters")
-            print(f"[Actuator {self.device_id}] Energy used: {energy_kwh:.4f} kWh")
             print("=" * 50)
             
             # Publish status update
             self.publish_status("CLOSED", actual_duration)
             
             # Publish resource usage for ThingSpeak
-            self.publish_resource_usage(water_liters, energy_kwh, actual_duration)
+            self.publish_resource_usage(water_liters, actual_duration)
         else:
             print(f"[Actuator {self.device_id}] Valve already closed")
 
-    def publish_resource_usage(self, water_liters, energy_kwh, duration):
+    def publish_resource_usage(self, water_liters, duration):
         """
-        Publish water and energy consumption in SenML format.
+        Publish water consumption in SenML format.
         
-        SenML format as per course reference:
-        List of measurements, each with bn, n, t, v (single value)
+        Note: Gravity-fed system - no energy tracking needed.
         """
         msg = [
             {
@@ -188,12 +186,6 @@ class ActuatorNode:
                 'n': 'water_liters',
                 't': time.time(),
                 'v': round(water_liters, 2)
-            },
-            {
-                'bn': self.device_id,
-                'n': 'energy_kwh',
-                't': time.time(),
-                'v': round(energy_kwh, 4)
             },
             {
                 'bn': self.device_id,
@@ -205,7 +197,7 @@ class ActuatorNode:
         
         # Publish to resource topic (irrigation/usage)
         self.client.publish(self.topic_resource, json.dumps(msg))
-        print(f"[Actuator {self.device_id}] Published usage: {water_liters:.2f}L, {energy_kwh:.4f}kWh")
+        print(f"[Actuator {self.device_id}] Published usage: {water_liters:.2f}L")
 
     def publish_status(self, status, duration=0):
         """Publish current valve status in SenML format."""
