@@ -12,18 +12,16 @@ class ThingSpeakAdaptor:
     """
     ThingSpeak Adaptor - Cloud Data Upload Service
     
-    Subscribes to sensor and resource usage topics.
-    Uploads soil moisture, temperature, and water needed to ThingSpeak.
-    
-    CONFIGURATION:
-    - Field 1: Soil Moisture
-    - Field 2: Temperature
-    - Field 3: Water Needed (Liters)
+    Subscribes to sensor and resource usage topics for Field 1 only.
+    Uploads soil moisture, temperature, and water usage to ThingSpeak.
+
     """
     
     API_URL = "https://api.thingspeak.com/update"
     
     def __init__(self, catalogue_url):
+        self.catalogue_url = catalogue_url
+        
         # 1. Bootstrap: Get config from Catalogue
         print(f"[ThingSpeak] Fetching config from {catalogue_url}...")
         res = requests.get(catalogue_url)
@@ -38,13 +36,13 @@ class ThingSpeakAdaptor:
         self.channel_id = thingspeak.get('channel_id', '')
         
         # Field mapping: data_key -> field number
-        # UPDATED: 'water_needed' is now mapped to field3
-        self.field_map = {
+        # Note: No energy_kwh - gravity-fed system
+        self.field_map = thingspeak.get('field_map', {
             'soil_moisture': 'field1',
             'temperature': 'field2',
-            'water_needed': 'field3',  # <--- Target for Water Needed
-            'water_liters': 'field3'   # (Optional) Actual usage also maps here if needed
-        }
+            'water_liters': 'field3',
+            'water_needed': 'field4'
+        })
         
         if not self.api_key:
             print("[ThingSpeak] WARNING: No API key configured!")
@@ -52,14 +50,18 @@ class ThingSpeakAdaptor:
         print(f"[ThingSpeak] Channel: {self.channel_id}")
         print(f"[ThingSpeak] Field mapping: {self.field_map}")
         
-        # Topics
-        self.topic_resource = data.get('topics', {}).get('resource_usage', 'smart_irrigation/irrigation/usage')
+        # Get resource usage topic from config
+        topics_config = data.get('topics', {})
+        self.topic_resource = topics_config.get('resource_usage', 'smart_irrigation/irrigation/usage')
+        
+        # Water needed topic (from Water Manager)
         self.topic_water_needed = "smart_irrigation/farm/field_1/water_needed"
         
-        # Find sensor topics ONLY for Field 1
+        # Find sensor topics for Field 1 ONLY
         self.sensor_topics = []
         for d in data['devices']:
             if d['type'] == 'sensor':
+                # Only subscribe to field_1 sensors
                 if 'field_1' in d['id']:
                     for topic in d['topics']['publish']:
                         self.sensor_topics.append(topic)
@@ -71,110 +73,95 @@ class ThingSpeakAdaptor:
         self.client.start()
         time.sleep(1)
         
+        # Buffer for rate limiting
         self.last_update = 0
         self.buffer = {}
 
     def notify(self, topic, payload):
         """Callback when MQTT message received."""
-        try:
-            data = json.loads(payload)
-        except:
+        data = json.loads(payload)
+        
+        # Filter: Only process Field 1 data
+        if 'field_2' in topic:
             return
         
-        # --- 1. FILTERING LOGIC ---
-        
-        # If the message comes from the Water Manager (water_needed), we accept it.
-        # The bn for water_manager is usually "water_manager".
-        is_water_manager = False
-        if isinstance(data, dict) and data.get('bn') == 'water_manager':
-            is_water_manager = True
-        
-        # If it's NOT from water manager, we apply strict field filters
-        if not is_water_manager:
-            # Reject data from Field 2
-            if "field_2" in topic: 
-                return
-            
-            # For resource usage, check the BN inside the SenML list
-            if topic == self.topic_resource and isinstance(data, list):
+        # For resource usage, check if it's from valve_1
+        if topic == self.topic_resource:
+            if isinstance(data, list):
                 bn = data[0].get('bn', '')
-                if 'field_1' not in bn and 'valve_1' not in bn:
+                if 'valve_1' not in bn and 'field_1' not in bn:
                     return
-
-        # --- 2. DATA EXTRACTION ---
         
-        # Case A: SenML List (Sensors & Actuators)
+        # Handle SenML format (list of measurements)
         if isinstance(data, list):
             for measurement in data:
-                if 'n' in measurement and 'v' in measurement:
-                    name = measurement['n']
-                    value = measurement['v']
-                    
+                name = measurement.get('n', '')
+                value = measurement.get('v', None)
+                
+                if name and value is not None:
+                    # Map measurement name to field
                     if name in self.field_map:
                         self.buffer[name] = value
-                        print(f"[ThingSpeak] Buffered: {name}={value} (Field {self.field_map[name][-1]})")
-
-        # Case B: Single Dict (Water Manager often sends single object)
-        elif isinstance(data, dict):
-            # Check if it has 'n' and 'v' directly (SenML record)
-            if 'n' in data and 'v' in data:
-                name = data['n']
-                value = data['v']
+                        print(f"[ThingSpeak] Buffered: {name}={value}")
+            
+            # Push to ThingSpeak (rate limited)
+            self.push_to_cloud()
+            return
+        
+        # Handle single dict format (from Water Manager)
+        if isinstance(data, dict):
+            name = data.get('n', '')
+            value = data.get('v', None)
+            
+            if name and value is not None:
                 if name in self.field_map:
                     self.buffer[name] = value
-                    print(f"[ThingSpeak] Buffered: {name}={value} (Field {self.field_map[name][-1]})")
-            
-            # Fallback for legacy dict format { 'v': { 'soil_moisture': 20 } }
-            elif 'v' in data and isinstance(data['v'], dict):
-                for key, val in data['v'].items():
-                    if key in self.field_map:
-                        self.buffer[key] = val
-                        
-        # --- 3. UPLOAD ---
-        self.push_to_cloud()
+                    print(f"[ThingSpeak] Buffered: {name}={value}")
+                    self.push_to_cloud()
 
     def push_to_cloud(self):
         """Push buffered data to ThingSpeak."""
         now = time.time()
         
-        # ThingSpeak Free Tier Limit: 15 seconds between updates
+        # Rate limit: 15 seconds between updates
         if now - self.last_update < 15:
             return
         
         if not self.buffer:
             return
         
-        # Build URL parameters
+        # Build request params
         params = {'api_key': self.api_key}
         for key, val in self.buffer.items():
             if key in self.field_map:
                 field = self.field_map[key]
                 params[field] = val
         
-        try:
-            res = requests.get(self.API_URL, params=params, timeout=10)
-            if res.ok:
-                print(f"[ThingSpeak] ☁️ Upload Success: {self.buffer}")
-                self.last_update = now
-                self.buffer.clear()
-            else:
-                print(f"[ThingSpeak] Upload Failed: {res.text}")
-        except Exception as e:
-            print(f"[ThingSpeak] Connection Error: {e}")
+        # Send to ThingSpeak
+        res = requests.get(self.API_URL, params=params, timeout=10)
+        if res.ok:
+            print(f"[ThingSpeak] Updated: {self.buffer}")
+            self.last_update = now
+            self.buffer.clear()
+        else:
+            print(f"[ThingSpeak] Failed: {res.text}")
 
     def run(self):
-        """Subscribe and wait."""
-        # 1. Sensors
+        """Subscribe to topics and run forever."""
+        # Subscribe to Field 1 sensor topics
         for topic in self.sensor_topics:
             self.client.subscribe(topic, qos=0)
-            
-        # 2. Resource Usage
+            print(f"[ThingSpeak] Subscribed to sensor: {topic}")
+        
+        # Subscribe to resource usage (water consumption)
         self.client.subscribe(self.topic_resource, qos=0)
+        print(f"[ThingSpeak] Subscribed to resource: {self.topic_resource}")
         
-        # 3. Water Needed (Critical)
+        # Subscribe to water_needed from Water Manager
         self.client.subscribe(self.topic_water_needed, qos=0)
+        print(f"[ThingSpeak] Subscribed to water_needed: {self.topic_water_needed}")
         
-        print(f"[ThingSpeak] Monitoring Field 1 & Water Needed on Field 3...")
+        print("[ThingSpeak] Running...")
         while True:
             time.sleep(1)
 
@@ -191,4 +178,3 @@ if __name__ == '__main__':
     except KeyboardInterrupt:
         adaptor.stop()
         print("[ThingSpeak] Stopped")
-        
