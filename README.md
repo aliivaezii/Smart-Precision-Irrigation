@@ -1,4 +1,4 @@
-# Smart Precision Irrigation System 2.0 🌱💧
+# Smart Precision Irrigation System 2.1 🌱💧
 
 ![Python](https://img.shields.io/badge/Python-3.11%2B-blue?style=for-the-badge&logo=python)
 ![Platform](https://img.shields.io/badge/Platform-Raspberry%20Pi-red?style=for-the-badge&logo=raspberrypi)
@@ -12,12 +12,14 @@ Unlike traditional timer-based systems, this platform employs a **Microservices 
 
 **Key Features:**
 * **Smart Water Management:** Triggers irrigation based on crop type, field size, and moisture deficit.
+* **Gravity-Fed Irrigation:** Uses elevated water tanks for energy-efficient water delivery without pumps.
 * **Frost Prevention:** Monitors temperature forecasts and publishes frost alerts when T < 2°C.
 * **Rain-Aware:** Polls the **Open-Meteo API** to cancel scheduled irrigation if rain is predicted (>5mm).
-* **Resource Tracking:** Monitors water consumption (L) and energy usage (kWh) per irrigation cycle.
-* **Remote Monitoring:** Real-time alerts and interactive control via a **Telegram Bot**.
-* **Data Analytics:** Uploads sensor data and resource usage to **ThingSpeak** for visualization.
+* **Resource Tracking:** Monitors water consumption (L) per irrigation cycle.
+* **Remote Monitoring:** Real-time weather alerts via **Telegram Bot** with system status viewing.
+* **Data Analytics:** Uploads sensor data to **ThingSpeak** for visualization.
 * **Dynamic Registration:** All devices register with the Catalogue via REST POST and send periodic heartbeats.
+* **Centralized Status:** Status Service provides unified device state access via REST API.
 
 ---
 
@@ -27,15 +29,38 @@ The software strictly follows **Object-Oriented Programming (OOP)** principles a
 ### 1. The Edge Layer (Sensors & Actuators)
 Running on **Raspberry Pi Pico 2 W** microcontrollers:
 * **Sensor Nodes:** Collect Soil Moisture and Temperature. Register via POST, send heartbeats.
-* **Actuator Nodes:** Control Solenoid Valves and Water Pump. Track water/energy usage. Register via POST.
+* **Actuator Nodes:** Control Solenoid Valves (gravity-fed). Track water usage. Register via POST.
 
 ### 2. The Service Layer (Core Logic)
 Running on a **Raspberry Pi 5** Gateway, communicating via **MQTT** and **REST**:
-* **Resource Catalogue:** The central registry with full CRUD (GET/POST/PUT/DELETE) for devices.
+* **Resource Catalogue (port 8080):** Central registry with full CRUD (GET/POST/PUT/DELETE) for devices.
+* **Status Service (port 9090):** Caches all device states, provides REST API for status queries.
 * **Water Manager:** The brain of the operation. Uses **smart irrigation logic** based on crop type and field size.
 * **Weather-Check:** Background service polling Open-Meteo for rain AND frost forecasts.
-* **Telegram Bot:** Interactive interface with inline keyboard buttons for status and control.
-* **ThingSpeak Adaptor:** Uploads sensor metrics AND resource usage to the cloud.
+* **Telegram Bot:** Sends weather alerts and allows users to view system status.
+* **ThingSpeak Adaptor:** Uploads sensor data from Field 1 to the cloud for visualization.
+
+---
+
+## 🏛️ Device Architecture
+
+The system uses **Object-Oriented inheritance** to avoid code duplication between sensors and actuators:
+
+```
+BaseDevice (common logic)
+    ├── BaseSensor → SensorNode
+    └── BaseActuator → ActuatorNode
+```
+
+| Class | File | Purpose |
+|-------|------|---------|
+| `BaseDevice` | `src/devices/base_device.py` | Bootstrap, register, heartbeat, MQTT setup |
+| `BaseSensor` | `src/devices/base_device.py` | Sensing loop, publish readings |
+| `BaseActuator` | `src/devices/base_device.py` | Command handling, status publishing |
+| `SensorNode` | `src/devices/sensor_node.py` | Implements `sense()` for soil/temp |
+| `ActuatorNode` | `src/devices/actuator_node.py` | Implements valve control logic |
+
+**Why inheritance?** Sensor and actuator nodes share 80% of their code (bootstrap, registration, heartbeat, MQTT). Base classes handle the common logic, so device files only implement their unique behavior.
 
 ---
 
@@ -106,21 +131,20 @@ When an actuator closes its valve, it publishes resource usage:
 ```json
 [
     {"bn": "actuator_valve_1", "n": "water_liters", "t": 1735084800.0, "v": 10.5},
-    {"bn": "actuator_valve_1", "n": "energy_kwh", "t": 1735084800.0, "v": 0.05}
+    {"bn": "actuator_valve_1", "n": "duration_sec", "t": 1735084800.0, "v": 120.0}
 ]
 ```
 
 **Constants:**
-* `FLOW_RATE_LPM = 20.0` (Liters per minute)
-* `PUMP_POWER_KW = 0.75` (Kilowatts)
+* `FLOW_RATE_LPM = 20.0` (Liters per minute - gravity-fed flow rate)
 
-**ThingSpeak Field Mapping:**
+**ThingSpeak Field Mapping (Field 1):**
 | Metric | ThingSpeak Field |
 |--------|------------------|
 | Soil Moisture | field1 |
 | Temperature | field2 |
 | Water (L) | field3 |
-| Energy (kWh) | field4 |
+| Water Needed (mm) | field4 |
 
 ---
 
@@ -132,7 +156,7 @@ When an actuator closes its valve, it publishes resource usage:
 | **Adafruit STEMMA Soil** | 10 | Capacitive Soil Moisture Sensor |
 | **MCP9808** | 10 | High Accuracy Temperature Sensor |
 | **Solenoid Valve (12V)** | 10 | Directional Water Control |
-| **Water Pump** | 1 | Main System Pressure |
+| **Elevated Water Tank** | 1 | Gravity-Fed Water Source |
 
 ---
 
@@ -166,22 +190,25 @@ pip install -r requirements.txt
 # Terminal 1: Catalogue (must start first)
 python src/services/catalogue/service.py
 
-# Terminal 2: Weather Check
+# Terminal 2: Status Service (must start before Telegram Bot)
+python src/services/status_service/service.py
+
+# Terminal 3: Weather Check
 python src/services/weather_check/service.py
 
-# Terminal 3: Water Manager
+# Terminal 4: Water Manager
 python src/services/water_manager/service.py
 
-# Terminal 4: Telegram Bot
+# Terminal 5: Telegram Bot
 python src/services/telegram_bot/service.py
 
-# Terminal 5: ThingSpeak Adaptor
+# Terminal 6: ThingSpeak Adaptor
 python src/services/thingspeak_adaptor/service.py
 
-# Terminal 6: Sensor Node
+# Terminal 7: Sensor Node
 python src/devices/sensor_node.py
 
-# Terminal 7: Actuator Node
+# Terminal 8: Actuator Node
 python src/devices/actuator_node.py
 ```
 
@@ -202,6 +229,10 @@ The system uses `config/system_config.json` for centralized configuration:
         "port_tls": 8883,
         "port_websocket": 8000
     },
+    "services": {
+        "catalogue": {"host": "localhost", "port": 8080},
+        "status_service": {"host": "localhost", "port": 9090}
+    },
     "settings": {
         "moisture_threshold": 30.0,
         "rain_threshold_mm": 5.0,
@@ -221,13 +252,23 @@ The system uses `config/system_config.json` for centralized configuration:
             "soil_moisture": "field1",
             "temperature": "field2",
             "water_liters": "field3",
-            "energy_kwh": "field4"
+            "water_needed": "field4"
         }
     }
 }
 ```
 
 > **Note**: All MQTT topics are prefixed with `smart_irrigation/` to avoid collisions on the public HiveMQ broker. You can customize this prefix in `project_info.topic_prefix`.
+
+---
+
+## 🌐 Services Port Reference
+
+| Service | Port | Description |
+|---------|------|-------------|
+| Catalogue Service | 8080 | Configuration and device registry |
+| Status Service | 9090 | Cached device status API |
+| MQTT Broker | 1883 | HiveMQ public broker |
 
 ---
 
@@ -251,4 +292,4 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 ---
 
 *Last Updated: Jan 2026*  
-*System Version: 2.0*
+*System Version: 2.1*
