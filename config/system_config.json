@@ -37,7 +37,7 @@
             "soil_moisture": "field1",
             "temperature": "field2",
             "water_liters": "field3",
-            "energy_kwh": "field4"
+            "water_needed": "field4"
         }
     },
     "fields": {
