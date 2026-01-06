@@ -72,6 +72,7 @@ class WaterManager:
         # Find all sensor and actuator topics from device list
         self.sensor_topics = {}
         self.actuator_topics = {}
+        self.relay_topics = {}
         
         for d in data['devices']:
             if d['type'] == 'sensor':
@@ -133,6 +134,25 @@ class WaterManager:
         # total_liters = water_needed_mm * field_size_m2 (1mm on 1m² = 1 liter)
         total_liters = water_needed_mm * field_size
         
+        # Functionality for Publishing Water Needed Quantity per field
+        try:
+            # Construct a specific topic for this field's water requirement
+            # e.g., smart_irrigation/farm/field_1/water_needed
+            water_topic = f"smart_irrigation/farm/{field_id}/water_needed"
+            
+            payload = {
+                "bn": "water_manager",
+                "n": "water_needed",
+                "u": "L",
+                "v": round(total_liters, 2),
+                "t": time.time()
+            }
+            self.client.publish(water_topic, json.dumps(payload))
+            print(f"[WaterManager] Published estimated need: {total_liters:.2f} L to {water_topic}")
+        except Exception as e:
+            print(f"[WaterManager] Error publishing water need: {e}")
+        # ------------------------------------------
+
         # duration_sec = total_liters / flow_rate_lps
         # flow_rate_lps = flow_rate_lpm / 60
         flow_rate_lps = flow_rate_lpm / 60.0
@@ -222,6 +242,7 @@ class WaterManager:
                 field_id = "field_1"  # Default fallback
             
             # Calculate smart irrigation duration
+            # Note: This will now also publish the water needed to MQTT
             duration = self.calculate_irrigation_duration(field_id, moisture)
             
             print(f"[WaterManager] LOW MOISTURE ({moisture}%) - Starting smart irrigation for {field_id}")
