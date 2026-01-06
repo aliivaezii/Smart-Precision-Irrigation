@@ -1,8 +1,17 @@
+"""
+Telegram Bot Service - Alerts and System Status
+
+1. Subscribes to weather/frost alerts via MQTT
+2. Sends alert notifications to subscribed users
+3. Fetches system status from Status Service via REST (not MQTT)
+
+"""
+
 import sys
 import os
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..', 'common'))
+
 import telepot
-import telepot.exception
 from telepot.loop import MessageLoop
 from telepot.namedtuple import InlineKeyboardMarkup, InlineKeyboardButton
 
@@ -10,215 +19,245 @@ from MyMQTT import MyMQTT
 import time
 import requests
 import json
-import datetime
 
-class TelegramBot():
-    """Telegram Bot: Alerts & System Status Viewer"""
+
+class TelegramBot:
+    """
+    Telegram Bot - Alerts and System Status Viewer.
     
-    # URL of the Status Service (Defaulting to localhost:9090 as per your previous script)
+    Features:
+    - Subscribe to weather/frost alerts
+    - View system status (via Status Service REST API)
+    """
+    
+    # URL of the Status Service
     STATUS_SERVICE_URL = "http://localhost:9090"
 
     def __init__(self, catalogue_url):
         self.catalogue_url = catalogue_url
-        self.alert_subscribers = [] 
+        self.alert_subscribers = []
 
         # 1. Bootstrap: Get config from Catalogue
         print(f"[TelegramBot] Fetching config from {catalogue_url}...")
-        try:
-            res = requests.get(catalogue_url)
-            res.raise_for_status()
-            data = res.json()
-        except Exception as e:
-            print(f"CRITICAL: Could not connect to Catalogue: {e}")
-            sys.exit(1)
+        res = requests.get(catalogue_url)
+        data = res.json()
         
         self.broker = data['broker']['address']
         self.port = data['broker']['port']
         
-        # Get Alert Topics
+        # Get alert topics from Catalogue
         topics_config = data.get('topics', {})
         self.topic_weather_alert = topics_config.get('weather_alert', 'smart_irrigation/weather/alert')
         self.topic_frost_alert = topics_config.get('frost_alert', 'smart_irrigation/weather/frost')
         
         # Telegram settings
-        telegram = data.get('telegram', {})
-        self.token = telegram.get('token', '')
-        self.chat_ids = telegram.get('chat_ids', [])
+        telegram_config = data.get('telegram', {})
+        self.token = telegram_config.get('token', '')
+        self.chat_ids = telegram_config.get('chat_ids', [])
         
-        # 2. Setup Bot
-        self.bot = telepot.Bot(self.token)
-        self.callback_dict = {'chat':self.on_chat_message, 'callback_query':self.on_callback_query}
-        MessageLoop(self.bot, self.callback_dict).run_as_thread()
-
         if not self.token:
             print("[TelegramBot] WARNING: No token configured!")
         
-        # 3. Start MQTT (ONLY for Alerts now)
+        print(f"[TelegramBot] Broker: {self.broker}:{self.port}")
+        print(f"[TelegramBot] Weather alert topic: {self.topic_weather_alert}")
+        print(f"[TelegramBot] Frost alert topic: {self.topic_frost_alert}")
+        
+        # 2. Setup Telegram Bot
+        self.bot = telepot.Bot(self.token)
+        callback_handlers = {
+            'chat': self.on_chat_message,
+            'callback_query': self.on_callback_query
+        }
+        MessageLoop(self.bot, callback_handlers).run_as_thread()
+        
+        # 3. Start MQTT (only for alerts)
         self.client = MyMQTT('telegram_bot', self.broker, self.port, notifier=self)
         self.client.start()
         time.sleep(1)
         
-        # 4. Subscribe
+        # 4. Subscribe to alert topics only
         self.setup_subscriptions()
 
     def setup_subscriptions(self):
-        """Subscribe ONLY to Weather and Frost alerts."""
-        print("[TelegramBot] Subscribing to Alert Topics...")
+        """Subscribe ONLY to weather and frost alert topics."""
+        print("[TelegramBot] Subscribing to alert topics...")
         self.client.subscribe(self.topic_weather_alert, qos=1)
         self.client.subscribe(self.topic_frost_alert, qos=1)
+        print("[TelegramBot] Subscribed to alerts")
 
     def on_chat_message(self, msg):
+        """Handle incoming chat messages."""
         content_type, chat_type, chat_id = telepot.glance(msg)
+        
+        # Add new users to chat list
         if chat_id not in self.chat_ids:
             self.chat_ids.append(chat_id)
         
-        if content_type == 'text' and msg['text'] == '/start':
-            self.send_main_menu(chat_id)
+        # Handle /start command
+        if content_type == 'text':
+            if msg['text'] == '/start':
+                self.send_main_menu(chat_id)
 
     def send_main_menu(self, chat_id):
+        """Send the main menu with options."""
         keyboard = InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text='🔔 Subscribe to Weather Alerts', callback_data='sub_alerts')],
+            [InlineKeyboardButton(text='🔔 Subscribe to Alerts', callback_data='subscribe_alerts')],
             [InlineKeyboardButton(text='📊 View System Status', callback_data='view_status')]
         ])
-        self.bot.sendMessage(chat_id, "**Smart Irrigation Bot** \nSelect an option:", reply_markup=keyboard, parse_mode='Markdown')
+        
+        message = "🌱 **Smart Irrigation Bot**\n\nSelect an option:"
+        self.bot.sendMessage(chat_id, message, reply_markup=keyboard, parse_mode='Markdown')
 
     def on_callback_query(self, msg):
+        """Handle button callbacks."""
         query_id, from_id, query_data = telepot.glance(msg, flavor='callback_query')
         
-        # --- RETURN TO MAIN MENU ---
+        # Handle main menu button
         if query_data == 'main_menu':
             self.send_main_menu(from_id)
-
-        # --- OPTION 1: SUBSCRIBE TO ALERTS ---
-        elif query_data == 'sub_alerts':
+            return
+        
+        # Handle subscribe to alerts
+        if query_data == 'subscribe_alerts':
             if from_id not in self.alert_subscribers:
                 self.alert_subscribers.append(from_id)
                 self.bot.answerCallbackQuery(query_id, text="Subscribed!")
-                self.bot.sendMessage(from_id, "✅ **Success!**\nYou will now receive immediate notifications for Rain and Frost.")
+                self.bot.sendMessage(from_id, "✅ **Success!**\nYou will now receive Rain and Frost alerts.", parse_mode='Markdown')
             else:
                 self.bot.answerCallbackQuery(query_id, text="Already subscribed.")
-
-        # --- OPTION 2: VIEW SYSTEM STATUS (REST API) ---
-        elif query_data == 'view_status':
+            return
+        
+        # Handle view status
+        if query_data == 'view_status':
             self.bot.answerCallbackQuery(query_id, text="Fetching status...")
-            self.view_system_status(from_id)
-
-    def view_system_status(self, chat_id):
-        """Fetch status from Status Service (HTTP) and format it."""
-        try:
-            # 1. GET Request to Status Service
-            response = requests.get(self.STATUS_SERVICE_URL, timeout=5)
-            response.raise_for_status()
-            data = response.json()
-            
-            if not data:
-                self.bot.sendMessage(chat_id, "ℹ️ System Status is empty. No devices have reported yet.")
-                return
-
-            # 2. Format the Output
-            msg_lines = ["🌱 **Current System Status** 🌱"]
-            
-            for device_id, info in data.items():
-                # Skip internal system alerts in the status view if desired, or show them
-                if device_id == 'system_alert':
-                    continue
-
-                payload = info.get('payload', [])
-                timestamp = info.get('received_at', 'Unknown')
-                
-                # Header for each device
-                dev_icon = "⚙️" if "actuator" in device_id or "valve" in device_id else "📡"
-                msg_lines.append(f"\n{dev_icon} **`{device_id}`**")
-                msg_lines.append(f"   🕒 _Updated: {timestamp}_")
-                
-                # Parse SenML List
-                if isinstance(payload, list):
-                    for item in payload:
-                        n = item.get('n', '')
-                        v = item.get('v', 'N/A')
-                        u = item.get('u', '') # unit if available
-                        
-                        # Pretty printing based on variable name
-                        if 'soil_moisture' in n:
-                            msg_lines.append(f"   💧 Moisture: **{v}%**")
-                        elif 'temperature' in n:
-                            msg_lines.append(f"   🌡️ Temp: **{v}°C**")
-                        elif 'valve_status' in n:
-                            status_icon = "🟢" if v == "OPEN" else "🔴"
-                            msg_lines.append(f"   🚿 Valve: {status_icon} **{v}**")
-                        elif 'water_liters' in n:
-                            msg_lines.append(f"   🚰 Water Used: {v}L")
-                        elif 'energy' in n:
-                            msg_lines.append(f"   ⚡ Energy: {v}kWh")
-                        else:
-                            msg_lines.append(f"   🔹 {n}: {v} {u}")
-
-            # Add Refresh Button
-            keyboard = InlineKeyboardMarkup(inline_keyboard=[
-                [InlineKeyboardButton(text='🔄 Refresh', callback_data='view_status')],
-                [InlineKeyboardButton(text='⬅️ Back', callback_data='main_menu')]
-            ])
-            
-            final_msg = "\n".join(msg_lines)
-            self.bot.sendMessage(chat_id, final_msg, reply_markup=keyboard, parse_mode='Markdown')
-
-        except requests.exceptions.ConnectionError:
-            self.bot.sendMessage(chat_id, "❌ **Error:** Could not contact Status Service.\nIs `status_service.py` running?")
-        except Exception as e:
-            print(f"Error fetching status: {e}")
-            self.bot.sendMessage(chat_id, "❌ Error parsing system status.")
-
-    def notify(self, topic, payload):
-        """MQTT Callback: ONLY handles alerts now."""
-        try:
-            data = json.loads(payload)
-        except:
+            self.show_system_status(from_id)
             return
 
-        # Handle Rain Alerts
+    def show_system_status(self, chat_id):
+        """Fetch status from Status Service and display it."""
+        # Get status from Status Service
+        response = requests.get(self.STATUS_SERVICE_URL, timeout=5)
+        
+        if response.status_code != 200:
+            self.bot.sendMessage(chat_id, "❌ **Error:** Could not contact Status Service.")
+            return
+        
+        data = response.json()
+        
+        if not data:
+            self.bot.sendMessage(chat_id, "ℹ️ No device data available yet.")
+            return
+        
+        # Build status message
+        lines = ["🌱 **System Status**\n"]
+        
+        for device_id, info in data.items():
+            # Skip system alerts in status view
+            if device_id == 'system_alert':
+                continue
+            
+            payload = info.get('payload', [])
+            timestamp = info.get('received_at', 'Unknown')
+            
+            # Choose icon based on device type
+            if 'actuator' in device_id or 'valve' in device_id:
+                icon = "⚙️"
+            else:
+                icon = "📡"
+            
+            lines.append(f"\n{icon} **`{device_id}`**")
+            lines.append(f"   🕒 _Updated: {timestamp}_")
+            
+            # Parse SenML payload (list format)
+            if isinstance(payload, list):
+                for item in payload:
+                    name = item.get('n', '')
+                    value = item.get('v', 'N/A')
+                    
+                    if 'soil_moisture' in name:
+                        lines.append(f"   💧 Moisture: **{value}%**")
+                    elif 'temperature' in name:
+                        lines.append(f"   🌡️ Temp: **{value}°C**")
+                    elif 'valve_status' in name:
+                        if value == "OPEN":
+                            status_icon = "🟢"
+                        else:
+                            status_icon = "🔴"
+                        lines.append(f"   🚿 Valve: {status_icon} **{value}**")
+                    elif 'water_liters' in name:
+                        lines.append(f"   🚰 Water Used: **{value}L**")
+                    else:
+                        lines.append(f"   🔹 {name}: **{value}**")
+        
+        # Add refresh button
+        keyboard = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text='🔄 Refresh', callback_data='view_status')],
+            [InlineKeyboardButton(text='⬅️ Back', callback_data='main_menu')]
+        ])
+        
+        final_message = "\n".join(lines)
+        self.bot.sendMessage(chat_id, final_message, reply_markup=keyboard, parse_mode='Markdown')
+
+    def notify(self, topic, payload):
+        """MQTT Callback: Handle alert messages only."""
+        data = json.loads(payload)
+        
+        # Handle Rain Alert
         if topic == self.topic_weather_alert:
             status = data.get('status', '')
             rain_mm = data.get('precipitation_mm', 0)
+            
             if status == 'ACTIVE':
                 msg = f"🌧️ **RAIN ALERT!**\nExpected: {rain_mm}mm\nIrrigation suspended."
             else:
                 msg = f"☀️ Rain alert cleared.\nIrrigation resumed."
+            
             self.send_alert_broadcast(msg)
+            return
 
-        # Handle Frost Alerts
-        elif topic == self.topic_frost_alert:
+        # Handle Frost Alert
+        if topic == self.topic_frost_alert:
             status = data.get('status', '')
             temp = data.get('value', 'N/A')
+            
             if status == 'ACTIVE':
                 msg = f"❄️ **FROST ALERT!**\nTemperature: {temp}°C\nIrrigation suspended."
             else:
                 msg = f"🌡️ Frost alert cleared.\nTemperature: {temp}°C"
+            
             self.send_alert_broadcast(msg)
+            return
 
     def send_alert_broadcast(self, text):
+        """Send alert message to all subscribed users."""
         if not self.alert_subscribers:
+            print("[TelegramBot] No subscribers for alerts")
             return
+        
         for chat_id in self.alert_subscribers:
-            try:
-                self.bot.sendMessage(chat_id, text, parse_mode='Markdown')
-            except:
-                pass
+            self.bot.sendMessage(chat_id, text, parse_mode='Markdown')
+        
+        print(f"[TelegramBot] Alert sent to {len(self.alert_subscribers)} subscribers")
 
     def run(self):
-        print("[TelegramBot] Running (Status Mode)...")
+        """Main loop."""
+        print("[TelegramBot] Running...")
         while True:
             time.sleep(10)
 
     def stop(self):
+        """Stop the bot."""
         self.client.stop()
+        print("[TelegramBot] Stopped")
+
 
 if __name__ == '__main__':
     catalogue_url = 'http://localhost:8080/'
     
     bot = TelegramBot(catalogue_url)
+    
     try:
         bot.run()
     except KeyboardInterrupt:
         bot.stop()
-        print("[TelegramBot] Stopped")
-        
+        print("[TelegramBot] Shutdown complete")
