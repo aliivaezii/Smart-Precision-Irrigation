@@ -87,37 +87,45 @@ class ThingSpeakAdaptor:
         
         # For resource usage, check if it's from valve_1
         if topic == self.topic_resource:
-            if isinstance(data, list):
-                bn = data[0].get('bn', '')
-                if 'valve_1' not in bn and 'field_1' not in bn:
-                    return
+            if not self.is_field_1_resource(data):
+                return
         
+        # Process the message based on format
+        self.process_message(data)
+        
+        # Push to ThingSpeak (rate limited)
+        self.push_to_cloud()
+
+    def is_field_1_resource(self, data):
+        """Check if resource data is from Field 1."""
+        if isinstance(data, list) and len(data) > 0:
+            bn = data[0].get('bn', '')
+            if 'valve_1' in bn or 'field_1' in bn:
+                return True
+        return False
+
+    def process_message(self, data):
+        """Process SenML message and buffer values."""
         # Handle SenML format (list of measurements)
         if isinstance(data, list):
             for measurement in data:
                 name = measurement.get('n', '')
                 value = measurement.get('v', None)
-                
-                if name and value is not None:
-                    # Map measurement name to field
-                    if name in self.field_map:
-                        self.buffer[name] = value
-                        print(f"[ThingSpeak] Buffered: {name}={value}")
-            
-            # Push to ThingSpeak (rate limited)
-            self.push_to_cloud()
+                self.buffer_value(name, value)
             return
         
         # Handle single dict format (from Water Manager)
         if isinstance(data, dict):
             name = data.get('n', '')
             value = data.get('v', None)
-            
-            if name and value is not None:
-                if name in self.field_map:
-                    self.buffer[name] = value
-                    print(f"[ThingSpeak] Buffered: {name}={value}")
-                    self.push_to_cloud()
+            self.buffer_value(name, value)
+
+    def buffer_value(self, name, value):
+        """Buffer a value if it's in our field map."""
+        if name and value is not None:
+            if name in self.field_map:
+                self.buffer[name] = value
+                print(f"[ThingSpeak] Buffered: {name}={value}")
 
     def push_to_cloud(self):
         """Push buffered data to ThingSpeak."""
@@ -166,7 +174,9 @@ class ThingSpeakAdaptor:
             time.sleep(1)
 
     def stop(self):
+        """Stop the adaptor."""
         self.client.stop()
+        print("[ThingSpeak] Stopped")
 
 
 if __name__ == '__main__':
