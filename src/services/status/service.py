@@ -112,28 +112,9 @@ class StatusService:
         """MQTT Callback: Store the latest message for each device."""
         data = json.loads(payload)
         timestamp = time.time()
-        device_id = "unknown"
-
-        # Try to find device ID from SenML format (list with 'bn')
-        if isinstance(data, list):
-            for item in data:
-                if 'bn' in item:
-                    device_id = item['bn']
-                    break
         
-        # Try to find device ID from dict format
-        elif isinstance(data, dict):
-            if 'bn' in data:
-                device_id = data['bn']
-            elif 'alert_type' in data:
-                device_id = "system_alert"
-
-        # If still unknown, extract from topic
-        if device_id == "unknown":
-            parts = topic.split('/')
-            if len(parts) >= 3:
-                # Topic format: smart_irrigation/farm/field_1/...
-                device_id = f"topic_{parts[-1]}"
+        # Extract device ID from the message
+        device_id = self.extract_device_id(data, topic)
 
         # Store the data
         self.latest_data[device_id] = {
@@ -142,6 +123,29 @@ class StatusService:
             "received_at": time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(timestamp)),
             "payload": data
         }
+
+    def extract_device_id(self, data, topic):
+        """Extract device ID from message payload or topic."""
+        # Try to find device ID from SenML format (list with 'bn')
+        if isinstance(data, list):
+            for item in data:
+                if 'bn' in item:
+                    return item['bn']
+        
+        # Try to find device ID from dict format
+        if isinstance(data, dict):
+            if 'bn' in data:
+                return data['bn']
+            if 'alert_type' in data:
+                return "system_alert"
+
+        # Extract from topic as fallback
+        # Topic format: smart_irrigation/farm/field_1/...
+        parts = topic.split('/')
+        if len(parts) >= 3:
+            return f"topic_{parts[-1]}"
+        
+        return "unknown"
 
     # ================= REST API =================
     
