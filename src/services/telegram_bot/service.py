@@ -1,10 +1,10 @@
 """
 Telegram Bot Service - Alerts and System Status
 
-1. Subscribes to weather/frost alerts via MQTT
+Simplified version that:
+1. Subscribes ONLY to weather/frost alerts via MQTT
 2. Sends alert notifications to subscribed users
 3. Fetches system status from Status Service via REST (not MQTT)
-
 """
 
 import sys
@@ -160,7 +160,8 @@ class TelegramBot:
             timestamp = info.get('received_at', 'Unknown')
             
             # Choose icon based on device type
-            if 'actuator' in device_id or 'valve' in device_id:
+            is_actuator = ('actuator' in device_id) or ('valve' in device_id)
+            if is_actuator:
                 icon = "⚙️"
             else:
                 icon = "📡"
@@ -173,21 +174,9 @@ class TelegramBot:
                 for item in payload:
                     name = item.get('n', '')
                     value = item.get('v', 'N/A')
-                    
-                    if 'soil_moisture' in name:
-                        lines.append(f"   💧 Moisture: **{value}%**")
-                    elif 'temperature' in name:
-                        lines.append(f"   🌡️ Temp: **{value}°C**")
-                    elif 'valve_status' in name:
-                        if value == "OPEN":
-                            status_icon = "🟢"
-                        else:
-                            status_icon = "🔴"
-                        lines.append(f"   🚿 Valve: {status_icon} **{value}**")
-                    elif 'water_liters' in name:
-                        lines.append(f"   🚰 Water Used: **{value}L**")
-                    else:
-                        lines.append(f"   🔹 {name}: **{value}**")
+                    line = self.format_measurement(name, value)
+                    if line:
+                        lines.append(line)
         
         # Add refresh button
         keyboard = InlineKeyboardMarkup(inline_keyboard=[
@@ -197,6 +186,30 @@ class TelegramBot:
         
         final_message = "\n".join(lines)
         self.bot.sendMessage(chat_id, final_message, reply_markup=keyboard, parse_mode='Markdown')
+
+    def format_measurement(self, name, value):
+        """Format a single measurement for display."""
+        if 'soil_moisture' in name:
+            return f"   💧 Moisture: **{value}%**"
+        
+        if 'temperature' in name:
+            return f"   🌡️ Temp: **{value}°C**"
+        
+        if 'valve_status' in name:
+            if value == "OPEN":
+                status_icon = "🟢"
+            else:
+                status_icon = "🔴"
+            return f"   🚿 Valve: {status_icon} **{value}**"
+        
+        if 'water_liters' in name:
+            return f"   🚰 Water Used: **{value}L**"
+        
+        if 'water_needed' in name:
+            return f"   🚰 Water Needed: **{value}L**"
+        
+        # Default format for unknown measurements
+        return f"   🔹 {name}: **{value}**"
 
     def notify(self, topic, payload):
         """MQTT Callback: Handle alert messages only."""
