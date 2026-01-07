@@ -84,6 +84,64 @@ Devices send heartbeats every ~60 seconds to keep registration alive.
 
 ---
 
+---
+
+## ➕ Adding Additional Sensors & Actuators
+
+You can register new devices manually using **Postman** or any REST client by sending a POST request to the Catalogue Service.
+
+**Endpoint:** `POST http://localhost:8080/devices`
+
+**Headers:** `Content-Type: application/json`
+
+### Register a New Sensor:
+```json
+{
+    "id": "sensor_node_field_2",
+    "name": "Soil Sensor Field 2",
+    "type": "sensor",
+    "topics": {
+        "publish": [
+            "smart_irrigation/farm/field_2/soil_moisture",
+            "smart_irrigation/farm/field_2/temperature"
+        ],
+        "subscribe": []
+    }
+}
+```
+
+### Register a New Actuator:
+```json
+{
+    "id": "actuator_valve_2",
+    "name": "Solenoid Valve Field 2",
+    "type": "actuator",
+    "topics": {
+        "publish": [
+            "smart_irrigation/farm/field_2/valve_status"
+        ],
+        "subscribe": [
+            "smart_irrigation/farm/field_2/valve_cmd"
+        ]
+    }
+}
+```
+
+### JSON Fields:
+| Field | Required | Description |
+|-------|----------|-------------|
+| `id` | ✅ Yes | Unique device identifier |
+| `name` | No | Human-readable name |
+| `type` | No | `"sensor"` or `"actuator"` |
+| `topics.publish` | No | MQTT topics device publishes to |
+| `topics.subscribe` | No | MQTT topics device subscribes to |
+
+### Expected Response:
+```json
+{"status": "registered", "id": "sensor_node_field_2"}
+```
+---
+
 ## 📊 SenML Message Format
 
 All MQTT messages follow the course-standard SenML format:
