@@ -535,7 +535,78 @@ water_liters = (flow_rate_lpm * duration_sec) / 60.0
 
 ---
 
-### 5.5 Service Layer
+### 5.5 Device Simulator
+
+#### `src/devices/device_simulator.py`
+
+**Purpose**: Automatically discovers and simulates ALL registered devices from the Catalogue.
+
+**Why This Exists**:
+When you register a device via POST (e.g., from Postman), the Catalogue creates the record and the Water Manager starts subscribing - but no actual data gets published because there's no physical device running. The Device Simulator solves this by:
+1. Polling the Catalogue every 60 seconds
+2. Discovering all registered sensors and actuators
+3. Starting simulators for each device automatically
+
+**Key Features**:
+- **Auto-Discovery**: Finds new devices without restart
+- **Parallel Simulation**: Runs multiple sensors/actuators in parallel threads
+- **Simple Code**: Uses basic Python constructs for educational purposes
+
+**How It Works**:
+```
+Device Simulator                    Catalogue
+       │                               │
+       │  GET /devices                 │
+       │ ─────────────────────────────►│
+       │                               │
+       │  [{"id": "sensor_garden_1_field_1_001", ...}, ...]
+       │ ◄─────────────────────────────│
+       │                               │
+       │  For each device:             │
+       │  - Start SensorSimulator thread (publishes data)
+       │  - Or ActuatorSimulator thread (listens for commands)
+       │                               │
+       │  Wait 60 seconds              │
+       │  Check for new devices...     │
+```
+
+**Classes**:
+```python
+class SensorSimulator:
+    """Simulates a sensor - publishes fake readings every 10 seconds."""
+    def __init__(self, device_id, garden_id, field_id, broker, port)
+    def run()  # Main loop: publish readings every 10 seconds
+
+class ActuatorSimulator:
+    """Simulates an actuator - listens for commands, publishes status."""
+    def __init__(self, device_id, garden_id, field_id, broker, port)
+    def notify(topic, payload)  # MQTT callback for commands
+    def run()  # Subscribes and waits for commands
+```
+
+**Running the Device Simulator**:
+```bash
+python src/devices/device_simulator.py
+```
+
+**Integration with Launcher Scripts**:
+The `start.py` launcher script starts the Device Simulator by default:
+```bash
+python scripts/macos/start.py              # Starts all services + Device Simulator
+python scripts/macos/start.py --no-devices # Services only, no Device Simulator
+```
+
+**Published Data (SenML format)**:
+```json
+[
+    {"bn": "sensor_garden_1_field_1_001", "n": "soil_moisture", "t": 1703419200.0, "v": 45.2},
+    {"bn": "sensor_garden_1_field_1_001", "n": "temperature", "t": 1703419200.0, "v": 22.5}
+]
+```
+
+---
+
+### 5.6 Service Layer
 
 #### `src/services/catalogue/service.py`
 
