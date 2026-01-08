@@ -80,13 +80,13 @@ System
 | Component | Type | Role |
 |-----------|------|------|
 | **Device, Service & Resource Catalogue** | REST Provider (●) | Central registry for all devices, services, and configuration |
-| **Water Manager (1,2)** | MQTT Pub/Sub | Control strategy - decides when to irrigate based on sensor data and weather |
-| **Device Connector for RPi - Sensors (1)** | MQTT Publisher | Publishes soil moisture and temperature readings |
-| **Device Connector for RPi - Actuators (2)** | MQTT Subscriber | Receives valve open/close commands |
+| **Water Manager (1,2)** | MQTT Pub/Sub + REST Consumer | Control strategy - decides when to irrigate based on sensor data and weather |
+| **Device Connector for RPi - Sensors (1)** | MQTT Publisher + REST Consumer | Publishes soil moisture and temperature readings |
+| **Device Connector for RPi - Actuators (1,2)** | MQTT Pub/Sub + REST Consumer | Receives valve commands, publishes status and resource usage |
 | **Status Service (buffer) (2)** | REST Provider + MQTT Sub | Caches device status, provides REST API for queries |
-| **Weather Check (1)** | MQTT Publisher | Publishes rain and frost alerts from Open-Meteo API |
-| **ThingSpeak Adaptor (2)** | MQTT Subscriber | Uploads sensor data to ThingSpeak cloud platform |
-| **Telegram Bot** | REST Consumer | Queries Status Service and Catalogue, sends notifications to users |
+| **Weather Check (1)** | MQTT Publisher + REST Consumer | Publishes rain and frost alerts from Open-Meteo API |
+| **ThingSpeak Adaptor (2)** | MQTT Subscriber + REST Consumer | Uploads sensor data to ThingSpeak cloud platform |
+| **Telegram Bot (2)** | MQTT Subscriber + REST Consumer | Subscribes to alerts, queries Status Service and Catalogue |
 | **Message Broker** | MQTT Broker | HiveMQ public broker (broker.hivemq.com:1883) |
 | **Open-Meteo API** | External REST API | Weather forecast data provider |
 | **ThingSpeak Platform** | External REST API | Cloud IoT analytics platform |
@@ -109,11 +109,12 @@ Based on the architecture diagram, the following connections exist:
 | Weather Check | Open-Meteo API | REST | Solid (➝) | Weather forecast data |
 | ThingSpeak Adaptor | ThingSpeak Platform | REST | Solid (➝) | Cloud data upload |
 | Sensors (1) | Message Broker | MQTT Pub | Dashed | Soil moisture & temperature |
-| Actuators (2) | Message Broker | MQTT Sub | Dashed | Valve commands |
+| Actuators (1,2) | Message Broker | MQTT Pub/Sub | Dashed | Receive commands, publish status & usage |
 | Water Manager (1,2) | Message Broker | MQTT Pub/Sub | Dashed | Commands out, sensor data & alerts in |
 | Status Service (2) | Message Broker | MQTT Sub | Dashed | Cache all device data |
 | Weather Check (1) | Message Broker | MQTT Pub | Dashed | Rain/Frost alerts |
 | ThingSpeak Adaptor (2) | Message Broker | MQTT Sub | Dashed | Sensor data for cloud upload |
+| Telegram Bot (2) | Message Broker | MQTT Sub | Dashed | Weather/Frost alerts for notifications |
 
 ---
 
@@ -195,20 +196,42 @@ All MQTT messages in this system follow the **SenML (Sensor Markup Language)** f
 | `bn` | Base Name (device ID) | `"sensor_node_field_1"` |
 | `n` | Measurement Name | `"soil_moisture"` |
 | `t` | Timestamp (Unix epoch) | `1703419200.0` |
-| `v` | Value (single value, NOT nested) | `25.5` |
+| `v` | Numeric Value | `25.5` |
+| `vs` | String Value | `"OPEN"` |
+| `vb` | Boolean Value | `true` |
 
-### 4.2 Important Rules
+### 4.2 Value Field Types
+
+SenML supports different value fields depending on the data type:
+
+| Field | Type | Used For | Example |
+|-------|------|----------|---------|
+| `v` | Numeric | Sensor readings (moisture, temperature, water_liters) | `"v": 25.5` |
+| `vs` | String | Status values (valve_status) | `"vs": "OPEN"` |
+| `vb` | Boolean | On/off states | `"vb": true` |
+
+**Important**: Only ONE value field should be present per measurement object.
+
+### 4.3 Important Rules
 
 1. **Always a List**: Messages are wrapped in an array `[...]`, even for single measurements
-2. **Single Value**: The `v` field contains a single value, NOT a nested dictionary
+2. **Single Value**: Each object contains only ONE value field (`v`, `vs`, or `vb`)
 3. **Separate Objects**: Each measurement type is a separate object in the list
 
-### 4.3 Example
+### 4.4 Examples
 
+**Sensor Data (numeric values using `v`):**
 ```json
 [
-    {"bn": "sensor_node_field_1", "n": "soil_moisture", "t": 1703419200.0, "v": 25.5},
-    {"bn": "sensor_node_field_1", "n": "temperature", "t": 1703419200.0, "v": 22.1}
+    {"bn": "sensor_garden_1_field_1_001", "n": "soil_moisture", "t": 1703419200.0, "v": 25.5},
+    {"bn": "sensor_garden_1_field_1_001", "n": "temperature", "t": 1703419200.0, "v": 22.1}
+]
+```
+
+**Actuator Status (string value using `vs`):**
+```json
+[
+    {"bn": "actuator_garden_1_field_1_001", "n": "valve_status", "t": 1703419200.0, "vs": "OPEN"}
 ]
 ```
 
@@ -1088,21 +1111,13 @@ This section documents the communication roles of each component based on the ar
 | Component | REST Provider ● | REST Consumer ➝ | MQTT Pub (1) | MQTT Sub (2) |
 |-----------|:---------------:|:---------------:|:------------:|:------------:|
 | **Catalogue** | ✅ | ❌ | ❌ | ❌ |
-| **Water Manager** | ❌ | ✅ | ✅ (1,2) | ✅ (1,2) |
-| **Sensors (RPi)** | ❌ | ✅ | ✅ (1) | ❌ |
-| **Actuators (RPi)** | ❌ | ✅ | ❌ | ✅ (2) |
-| **Status Service** | ✅ | ✅ | ❌ | ✅ (2) |
-| **Weather Check** | ❌ | ✅ | ✅ (1) | ❌ |
-| **ThingSpeak Adaptor** | ❌ | ✅ | ❌ | ✅ (2) |
-| **Telegram Bot** | ❌ | ✅ | ❌ | ❌ |
-
-> **Note on Telegram Bot**: According to the architecture diagram, Telegram Bot uses **REST only** to communicate with:
-> - Catalogue (bootstrap configuration)
-> - Status Service (device status retrieval)
-> 
-> However, the **actual implementation** also subscribes to MQTT weather/frost alert topics for real-time notifications. This is an enhancement beyond the diagram design.
-
-> **Note on Actuators**: In the diagram, actuators only subscribe (2). In the **actual implementation**, actuators also publish valve_status and resource_usage data. This is documented in Section 5.4.
+| **Water Manager (1,2)** | ❌ | ✅ | ✅ | ✅ |
+| **Sensors (1)** | ❌ | ✅ | ✅ | ❌ |
+| **Actuators (1,2)** | ❌ | ✅ | ✅ | ✅ |
+| **Status Service (2)** | ✅ | ✅ | ❌ | ✅ |
+| **Weather Check (1)** | ❌ | ✅ | ✅ | ❌ |
+| **ThingSpeak Adaptor (2)** | ❌ | ✅ | ❌ | ✅ |
+| **Telegram Bot (2)** | ❌ | ✅ | ❌ | ✅ |
 
 ### 6.3 Detailed Role Analysis
 
@@ -1110,18 +1125,19 @@ This section documents the communication roles of each component based on the ar
 - **Catalogue Service**: Central registry providing configuration data and device registration via REST API. All other services bootstrap from this.
 
 #### REST Provider + MQTT Subscriber:
-- **Status Service (buffer)**: Provides cached device status via REST (port 9090), subscribes to all device topics via MQTT to maintain the cache.
+- **Status Service (buffer) (2)**: Provides cached device status via REST (port 9090), subscribes to all device topics via MQTT to maintain the cache.
 
 #### MQTT Publisher Only:
-- **Sensors (RPi)**: Publish sensor readings (soil_moisture, temperature) via MQTT. Consume REST only for registration.
-- **Weather Check**: Publishes weather alerts (rain/frost) via MQTT. Consumes REST from Catalogue and Open-Meteo API.
+- **Sensors (1)**: Publish sensor readings (soil_moisture, temperature) via MQTT. Consume REST only for registration.
+- **Weather Check (1)**: Publishes weather alerts (rain/frost) via MQTT. Consumes REST from Catalogue and Open-Meteo API.
 
 #### MQTT Subscriber Only:
-- **Actuators (RPi)**: Subscribe to valve commands via MQTT. Consume REST for registration. (Also publish status in actual implementation)
-- **ThingSpeak Adaptor**: Subscribes to sensor data via MQTT, uploads to ThingSpeak cloud via REST.
+- **ThingSpeak Adaptor (2)**: Subscribes to sensor data via MQTT, uploads to ThingSpeak cloud via REST.
+- **Telegram Bot (2)**: Subscribes to weather/frost alerts via MQTT, queries Status Service via REST for device status.
 
 #### Hybrid (Publisher & Subscriber):
 - **Water Manager (1,2)**: The "brain" of the system with Control Strategy. Subscribes to sensor data and weather alerts, publishes valve commands.
+- **Actuators (1,2)**: Subscribe to valve commands via MQTT, publish valve_status and resource_usage (water_liters) data.
 
 ### 6.4 Control Strategy
 
@@ -1134,39 +1150,22 @@ As shown in the diagram, the **Control Strategy** is integrated within the **Wat
    - Crop type and field configuration
 4. Sends valve commands (MQTT publisher)
 
-### 6.5 Design vs Implementation Analysis
+### 6.5 Design vs Implementation Verification
 
-The following table documents differences between the **architecture diagram** and the **actual implementation**:
+The architecture diagram has been updated and now **fully matches the implementation**:
 
-| Component | Diagram Design | Actual Implementation | Status | Action Needed |
-|-----------|----------------|----------------------|--------|---------------|
-| **Telegram Bot** | REST only (no MQTT) | Subscribes to MQTT alerts (weather/frost) | ⚡ Enhanced | None - improves UX |
-| **Actuators** | MQTT Subscriber only (2) | Also publishes valve_status and water_liters | ⚡ Enhanced | Update diagram to show (1,2) |
-| **Status Service** | REST Provider (●) + MQTT Sub (2) | Same as diagram | ✅ Match | None |
-| **Weather Check** | MQTT Publisher (1) + REST Consumer | Same as diagram | ✅ Match | None |
-| **ThingSpeak Adaptor** | MQTT Subscriber (2) | Same as diagram | ✅ Match | None |
-| **Water Manager** | MQTT Pub/Sub (1,2) + Control Strategy | Same as diagram | ✅ Match | None |
-| **Sensors** | MQTT Publisher (1) | Same as diagram | ✅ Match | None |
-| **Catalogue** | REST Provider (●) only | Same as diagram | ✅ Match | None |
+| Component | Diagram | Implementation | Status |
+|-----------|---------|----------------|--------|
+| **Telegram Bot (2)** | MQTT Sub (2) + REST Consumer | ✅ Same | ✅ Match |
+| **Actuators (1,2)** | MQTT Pub/Sub (1,2) + REST Consumer | ✅ Same | ✅ Match |
+| **Sensors (1)** | MQTT Publisher (1) + REST Consumer | ✅ Same | ✅ Match |
+| **Status Service (2)** | REST Provider (●) + MQTT Sub (2) | ✅ Same | ✅ Match |
+| **Weather Check (1)** | MQTT Publisher (1) + REST Consumer | ✅ Same | ✅ Match |
+| **ThingSpeak Adaptor (2)** | MQTT Subscriber (2) + REST Consumer | ✅ Same | ✅ Match |
+| **Water Manager (1,2)** | MQTT Pub/Sub (1,2) + REST Consumer | ✅ Same | ✅ Match |
+| **Catalogue** | REST Provider (●) only | ✅ Same | ✅ Match |
 
-**Legend:**
-- ✅ Match = Implementation matches diagram design
-- ⚡ Enhanced = Implementation adds features beyond diagram (acceptable)
-- ❌ Gap = Missing feature that should be implemented
-
-**Analysis:**
-
-1. **Telegram Bot MQTT Subscription (Enhancement)**: 
-   - **Diagram**: Shows REST-only connections to Catalogue and Status Service
-   - **Code**: Also subscribes to `weather/alert` and `weather/frost` MQTT topics
-   - **Rationale**: Enables **real-time push notifications** instead of polling. This is a valuable enhancement that improves user experience.
-   - **Recommendation**: Either update the diagram to show MQTT connection, OR keep it as-is since it's an internal optimization.
-
-2. **Actuator MQTT Publishing (Enhancement)**:
-   - **Diagram**: Shows only (2) = Subscriber
-   - **Code**: Also publishes `valve_status` and `water_liters` (resource usage)
-   - **Rationale**: Enables monitoring of valve state and water consumption tracking
-   - **Recommendation**: Update diagram to show Actuators as (1,2) if this is a core feature
+**All components verified ✅** - The diagram accurately represents the system architecture.
 
 ---
 
