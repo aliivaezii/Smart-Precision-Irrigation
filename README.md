@@ -1,4 +1,4 @@
-# Smart Precision Irrigation System 2.1 🌱💧
+# Smart Precision Irrigation System 2.2 🌱💧
 
 ![Python](https://img.shields.io/badge/Python-3.11%2B-blue?style=for-the-badge&logo=python)
 ![Platform](https://img.shields.io/badge/Platform-Raspberry%20Pi-red?style=for-the-badge&logo=raspberrypi)
@@ -12,14 +12,15 @@ Unlike traditional timer-based systems, this platform employs a **Microservices 
 
 **Key Features:**
 * **Smart Water Management:** Triggers irrigation based on crop type, field size, and moisture deficit.
+* **Multi-Garden Support:** Manage multiple gardens with independent field configurations.
 * **Gravity-Fed Irrigation:** Uses elevated water tanks for energy-efficient water delivery without pumps.
 * **Frost Prevention:** Monitors temperature forecasts and publishes frost alerts when T < 2°C.
 * **Rain-Aware:** Polls the **Open-Meteo API** to cancel scheduled irrigation if rain is predicted (>5mm).
 * **Resource Tracking:** Monitors water consumption (L) per irrigation cycle.
 * **Remote Monitoring:** Real-time weather alerts via **Telegram Bot** with system status viewing.
 * **Data Analytics:** Uploads sensor data to **ThingSpeak** for visualization.
-* **Dynamic Registration:** All devices register with the Catalogue via REST POST and send periodic heartbeats.
-* **Centralized Status:** Status Service provides unified device state access via REST API.
+* **Dynamic ID Assignment:** Devices self-register via POST and receive auto-generated IDs.
+* **Auto-Discovery:** Water Manager automatically discovers new devices every 60 seconds.
 
 ---
 
@@ -42,20 +43,46 @@ Running on a **Raspberry Pi 5** Gateway, communicating via **MQTT** and **REST**
 
 ---
 
+## 🏛️ Device Architecture
+
+The system uses **Object-Oriented inheritance** to avoid code duplication between sensors and actuators:
+
+```
+BaseDevice (common logic: self-registration, bootstrap, heartbeat, MQTT)
+    ├── BaseSensor → SensorNode
+    └── BaseActuator → ActuatorNode
+```
+
+| Class | File | Purpose |
+|-------|------|---------|
+| `BaseDevice` | `src/devices/base_device.py` | Self-registration (dynamic ID), bootstrap, heartbeat, MQTT setup |
+| `BaseSensor` | `src/devices/base_device.py` | Sensing loop, publish readings |
+| `BaseActuator` | `src/devices/base_device.py` | Command handling, status publishing |
+| `SensorNode` | `src/devices/sensor_node.py` | Implements `sense()` for soil/temp |
+| `ActuatorNode` | `src/devices/actuator_node.py` | Implements valve control logic |
+
+**Why inheritance?** Sensor and actuator nodes share 80% of their code (self-registration, bootstrap, heartbeat, MQTT). Base classes handle the common logic, so device files only implement their unique behavior.
+
+**Dynamic ID Assignment:** Devices register via POST without an ID. The Catalogue generates unique IDs in format `{type}_{garden_id}_{field_id}_{counter:03d}`.
+
+---
+
 ## 📡 Device Registration
 
-Both sensors and actuators register themselves with the Catalogue:
+Devices **self-register** with the Catalogue and receive dynamically assigned IDs:
 
 ```python
-# POST /devices
+# Devices call POST /devices with type, garden_id, field_id
+# Catalogue returns: assigned ID, topics, garden/field info
 payload = {
-    "id": "sensor_node_field_1",
-    "name": "Field 1 Sensor",
     "type": "sensor",
-    "topics": {"publish": [...], "subscribe": []}
+    "garden_id": "garden_1",
+    "field_id": "field_1",
+    "name": "Sensor garden_1 field_1"
 }
 res = requests.post(url, json=payload)
-result = res.json()  # {"status": "registered"}
+result = res.json()
+# {"status": "registered", "id": "sensor_garden_1_field_1_001", "topics": {...}}
 ```
 
 Devices send heartbeats every ~60 seconds to keep registration alive.
@@ -64,57 +91,99 @@ Devices send heartbeats every ~60 seconds to keep registration alive.
 
 ## ➕ Adding Additional Sensors & Actuators
 
-You can register new devices manually using **Postman** or any REST client by sending a POST request to the Catalogue Service.
+You can register new devices manually using **Postman** or any REST client. The Catalogue assigns a unique ID automatically.
 
 **Endpoint:** `POST http://localhost:8080/devices`
 
 **Headers:** `Content-Type: application/json`
 
-### Register a New Sensor:
+### Register a New Sensor (Dynamic ID):
 ```json
 {
-    "id": "sensor_node_field_2",
-    "name": "Soil Sensor Field 2",
     "type": "sensor",
-    "topics": {
-        "publish": [
-            "smart_irrigation/farm/field_2/soil_moisture",
-            "smart_irrigation/farm/field_2/temperature"
-        ],
-        "subscribe": []
-    }
+    "garden_id": "garden_1",
+    "field_id": "field_2",
+    "name": "Soil Sensor Garden 1 Field 2"
 }
 ```
 
-### Register a New Actuator:
+### Register a New Actuator (Dynamic ID):
 ```json
 {
-    "id": "actuator_valve_2",
-    "name": "Solenoid Valve Field 2",
     "type": "actuator",
-    "topics": {
-        "publish": [
-            "smart_irrigation/farm/field_2/valve_status"
-        ],
-        "subscribe": [
-            "smart_irrigation/farm/field_2/valve_cmd"
-        ]
-    }
+    "garden_id": "garden_1",
+    "field_id": "field_2",
+    "name": "Valve Garden 1 Field 2"
 }
 ```
 
 ### JSON Fields:
 | Field | Required | Description |
 |-------|----------|-------------|
-| `id` | ✅ Yes | Unique device identifier |
+| `type` | ✅ Yes | `"sensor"` or `"actuator"` |
+| `garden_id` | ✅ Yes | Garden identifier (e.g., `"garden_1"`) |
+| `field_id` | ✅ Yes | Field identifier (e.g., `"field_1"`) |
 | `name` | No | Human-readable name |
-| `type` | No | `"sensor"` or `"actuator"` |
-| `topics.publish` | No | MQTT topics device publishes to |
-| `topics.subscribe` | No | MQTT topics device subscribes to |
 
 ### Expected Response:
 ```json
-{"status": "registered", "id": "sensor_node_field_2"}
+{
+    "status": "registered",
+    "id": "sensor_garden_1_field_2_001",
+    "topics": {
+        "publish": ["smart_irrigation/farm/garden_1/field_2/soil_moisture", "..."],
+        "subscribe": []
+    },
+    "garden_id": "garden_1",
+    "field_id": "field_2"
+}
+```
+
+> **Note**: The Catalogue generates a unique ID and MQTT topics automatically. The Water Manager auto-discovers new devices every 60 seconds.
+
+---
+
+## 🏡 Multiple Gardens Support
+
+The system supports multiple gardens, each with their own fields and crop configurations:
+
+```json
+{
+    "gardens": {
+        "garden_1": {
+            "name": "Main Garden",
+            "location": {"lat": 45.06, "lon": 7.66},
+            "fields": {
+                "field_1": {"crop_type": "tomato", "field_size_m2": 100},
+                "field_2": {"crop_type": "wheat", "field_size_m2": 200}
+            }
+        },
+        "garden_2": {
+            "name": "Secondary Garden",
+            "fields": {
+                "field_1": {"crop_type": "lettuce", "field_size_m2": 50}
+            }
+        }
+    }
+}
+```
+
+### Add a New Garden via Postman:
+**Endpoint:** `POST http://localhost:8080/gardens`
+
+```json
+{
+    "id": "garden_3",
+    "name": "Rooftop Garden",
+    "location": {"lat": 45.08, "lon": 7.68},
+    "fields": {
+        "field_1": {
+            "crop_type": "tomato",
+            "field_size_m2": 25,
+            "flow_rate_lpm": 10.0
+        }
+    }
+}
 ```
 
 ---
@@ -165,13 +234,12 @@ When an actuator closes its valve, it publishes resource usage:
 
 ```json
 [
-    {"bn": "actuator_valve_1", "n": "water_liters", "t": 1735084800.0, "v": 10.5},
-    {"bn": "actuator_valve_1", "n": "duration_sec", "t": 1735084800.0, "v": 120.0}
+    {"bn": "actuator_garden_1_field_1_001", "n": "water_liters", "t": 1735084800.0, "v": 10.5},
+    {"bn": "actuator_garden_1_field_1_001", "n": "duration_sec", "t": 1735084800.0, "v": 120.0}
 ]
 ```
 
-**Constants:**
-* `FLOW_RATE_LPM = 20.0` (Liters per minute - gravity-fed flow rate)
+**Flow Rate:** Configured per field in `gardens.{garden_id}.fields.{field_id}.flow_rate_lpm`
 
 **ThingSpeak Field Mapping (Field 1):**
 | Metric | ThingSpeak Field |
@@ -220,32 +288,69 @@ source venv/bin/activate  # Mac/Linux
 pip install -r requirements.txt
 ```
 
-### 4. Start Services (in order)
+### 4. Start the System
+
+#### 🚀 Quick Start (Recommended)
+Use the automated launcher scripts to start all services in separate terminals:
+
+**macOS:**
+```bash
+python start_system_macos.py              # Start all services + devices
+python start_system_macos.py --no-devices # Start services only
+```
+
+**Windows:**
+```bash
+python start_system_windows.py              # Start all services + devices
+python start_system_windows.py --no-devices # Start services only
+python start_system_windows.py --powershell # Use PowerShell instead of cmd
+```
+
+#### 🛑 Stop the System
+**macOS:**
+```bash
+python stop_system_macos.py         # Stop all services (with confirmation)
+python stop_system_macos.py --force # Stop without confirmation
+```
+
+**Windows:**
+```bash
+python stop_system_windows.py         # Stop all services (with confirmation)
+python stop_system_windows.py --force # Stop without confirmation
+```
+
+#### 📋 Manual Start (Alternative)
+If you prefer to start services manually in separate terminals:
+
 ```bash
 # Terminal 1: Catalogue (must start first)
 python src/services/catalogue/service.py
 
-# Terminal 2: Status Service (must start before Telegram Bot)
-python src/services/status_service/service.py
-
-# Terminal 3: Weather Check
+# Terminal 2: Weather Check
 python src/services/weather_check/service.py
 
-# Terminal 4: Water Manager
+# Terminal 3: Water Manager (auto-discovers devices)
 python src/services/water_manager/service.py
 
-# Terminal 5: Telegram Bot
+# Terminal 4: Telegram Bot
 python src/services/telegram_bot/service.py
 
-# Terminal 6: ThingSpeak Adaptor
+# Terminal 5: ThingSpeak Adaptor
 python src/services/thingspeak_adaptor/service.py
 
-# Terminal 7: Sensor Node
-python src/devices/sensor_node.py
+# Terminal 6: Sensor Node (specify garden_id and field_id)
+python src/devices/sensor_node.py garden_1 field_1
 
-# Terminal 8: Actuator Node
-python src/devices/actuator_node.py
+# Terminal 7: Actuator Node (specify garden_id and field_id)
+python src/devices/actuator_node.py garden_1 field_1
+
+# Start additional sensors/actuators for other fields:
+python src/devices/sensor_node.py garden_1 field_2
+python src/devices/actuator_node.py garden_1 field_2
+python src/devices/sensor_node.py garden_2 field_1
 ```
+
+> **Note**: The Water Manager automatically discovers new devices every 60 seconds. No restart required when adding new sensors/actuators.
 
 ---
 
@@ -278,10 +383,17 @@ The system uses `config/system_config.json` for centralized configuration:
         "frost_alert": "smart_irrigation/weather/frost",
         "resource_usage": "smart_irrigation/irrigation/usage"
     },
-    "fields": {
-        "field_1": {"crop_type": "tomato", "field_size_m2": 100, "flow_rate_lpm": 20.0},
-        "field_2": {"crop_type": "wheat", "field_size_m2": 200, "flow_rate_lpm": 20.0}
+    "gardens": {
+        "garden_1": {
+            "name": "Main Garden",
+            "fields": {
+                "field_1": {"crop_type": "tomato", "field_size_m2": 100, "flow_rate_lpm": 20.0},
+                "field_2": {"crop_type": "lettuce", "field_size_m2": 50, "flow_rate_lpm": 15.0}
+            }
+        }
     },
+    "device_counters": {},
+    "devices": [],
     "thingspeak": {
         "field_map": {
             "soil_moisture": "field1",
@@ -294,6 +406,8 @@ The system uses `config/system_config.json` for centralized configuration:
 ```
 
 > **Note**: All MQTT topics are prefixed with `smart_irrigation/` to avoid collisions on the public HiveMQ broker. You can customize this prefix in `project_info.topic_prefix`.
+
+> **Dynamic IDs**: The `devices` array is populated at runtime as devices self-register. The `device_counters` object tracks ID sequences per garden/field.
 
 ---
 
@@ -326,5 +440,5 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ---
 
-*Last Updated: Jan 2026*  
-*System Version: 2.1*
+*Last Updated: Jan 2025*  
+*System Version: 2.2*
