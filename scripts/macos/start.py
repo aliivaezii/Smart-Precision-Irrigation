@@ -21,7 +21,6 @@ import subprocess
 import time
 import os
 import sys
-import argparse
 
 # Get the project root directory (two levels up from this script)
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -38,26 +37,12 @@ SERVICES = [
     ("ThingSpeak Adaptor", "src/services/thingspeak_adaptor/service.py", 1),
 ]
 
-# Device definitions (started after services)
-# Format: (name, relative_path, args, delay_after_start)
-DEVICES = [
-    ("Sensor Node (garden_1/field_1)", "src/devices/sensor_node.py", ["garden_1", "field_1"], 1),
-    ("Actuator Node (garden_1/field_1)", "src/devices/actuator_node.py", ["garden_1", "field_1"], 1),
-]
+# Device simulator (auto-discovers all registered devices)
+DEVICE_SIMULATOR = ("Device Simulator", "src/devices/device_simulator.py", [], 1)
 
 
-def open_terminal_with_command(title: str, command: str, working_dir: str) -> bool:
-    """
-    Opens a new Terminal window on macOS and runs the specified command.
-    
-    Args:
-        title: Window title for identification
-        command: The command to run in the terminal
-        working_dir: Working directory for the command
-    
-    Returns:
-        True if successful, False otherwise
-    """
+def open_terminal_with_command(title, command, working_dir):
+    """Opens a new Terminal window on macOS and runs the specified command."""
     applescript = f'''
     tell application "Terminal"
         activate
@@ -75,11 +60,8 @@ def open_terminal_with_command(title: str, command: str, working_dir: str) -> bo
         return False
 
 
-def get_python_command() -> str:
-    """
-    Determines the correct Python command to use.
-    Checks for virtual environment first, then falls back to system Python.
-    """
+def get_python_command():
+    """Determines the correct Python command to use."""
     # Check for .venv (standard naming)
     venv_path = os.path.join(PROJECT_ROOT, ".venv", "bin", "python")
     if os.path.exists(venv_path):
@@ -100,14 +82,8 @@ def get_python_command() -> str:
     return "python"
 
 
-def start_services(python_cmd: str, include_devices: bool = True) -> None:
-    """
-    Starts all services in separate Terminal windows.
-    
-    Args:
-        python_cmd: Python executable to use
-        include_devices: Whether to start sensor/actuator devices
-    """
+def start_services(python_cmd, include_devices=True):
+    """Starts all services in separate Terminal windows."""
     print()
     print("=" * 60)
     print("🌱 Smart Precision Irrigation System")
@@ -134,18 +110,17 @@ def start_services(python_cmd: str, include_devices: bool = True) -> None:
     # Start devices if requested
     if include_devices:
         print()
-        print("Starting Devices...")
+        print("Starting Device Simulator...")
         print("-" * 40)
         
-        for name, script_path, args, delay in DEVICES:
-            full_path = os.path.join(PROJECT_ROOT, script_path)
-            
-            if not os.path.exists(full_path):
-                print(f"  ⚠️  Not found: {script_path}")
-                continue
-            
-            args_str = " ".join(args)
-            command = f"{python_cmd} {full_path} {args_str}"
+        name, script_path, args, delay = DEVICE_SIMULATOR
+        full_path = os.path.join(PROJECT_ROOT, script_path)
+        
+        if not os.path.exists(full_path):
+            print(f"  ⚠️  Not found: {script_path}")
+        else:
+            args_str = " ".join(args) if args else ""
+            command = f"{python_cmd} {full_path} {args_str}".strip()
             if open_terminal_with_command(name, command, PROJECT_ROOT):
                 time.sleep(delay)
     
@@ -159,49 +134,39 @@ def start_services(python_cmd: str, include_devices: bool = True) -> None:
     print("     Gardens:    http://localhost:8080/gardens")
     print()
     print("  💡 Tips:")
-    print("     • Close individual windows to stop services")
-    print("     • Press Ctrl+C in a terminal to stop that service")
+    print("     • The Device Simulator auto-discovers registered devices")
+    print("     • POST new devices to /devices - they start automatically!")
     print("     • Run 'python scripts/macos/stop.py' to stop all")
     print("=" * 60)
     print()
 
 
+
+
 def main():
-    parser = argparse.ArgumentParser(
-        description="Start Smart Precision Irrigation System (macOS)",
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog="""
-Examples:
-  python scripts/macos/start.py              Start all services and devices
-  python scripts/macos/start.py --no-devices Start services only
-  python scripts/macos/start.py --python /usr/bin/python3  Use specific Python
-        """
-    )
-    parser.add_argument(
-        "--no-devices",
-        action="store_true",
-        help="Start services only, without sensor/actuator devices"
-    )
-    parser.add_argument(
-        "--python",
-        type=str,
-        default=None,
-        help="Path to Python executable (default: auto-detect)"
-    )
+    """
+    Main function - starts all services.
     
-    args = parser.parse_args()
-    
+    Usage:
+        python scripts/macos/start.py              # Start all services + devices
+        python scripts/macos/start.py --no-devices # Start services only
+    """
     # Check platform
     if sys.platform != "darwin":
-        print("❌ This script is for macOS only.")
-        print("   For Windows: python scripts/windows/start.py")
+        print("This script is for macOS only.")
+        print("For Windows: python scripts/windows/start.py")
         sys.exit(1)
     
+    # Check for --no-devices flag
+    include_devices = True
+    if len(sys.argv) > 1 and sys.argv[1] == "--no-devices":
+        include_devices = False
+    
     # Determine Python command
-    python_cmd = args.python if args.python else get_python_command()
+    python_cmd = get_python_command()
     
     # Start the system
-    start_services(python_cmd, include_devices=not args.no_devices)
+    start_services(python_cmd, include_devices=include_devices)
 
 
 if __name__ == "__main__":
