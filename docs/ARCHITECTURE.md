@@ -628,6 +628,14 @@ topics = {
 }
 ```
 
+> **⚠️ Important**: POST registration only creates the device configuration in the Catalogue. To actually run the device (publish sensor data or respond to commands), you must start a Python process:
+> ```bash
+> # After POST registration for garden_1/field_3:
+> python src/devices/sensor_node.py garden_1 field_3
+> python src/devices/actuator_node.py garden_1 field_3
+> ```
+> In a real deployment, each device is a physical microcontroller. The Python scripts simulate these devices.
+
 **Multi-Garden Structure** (in system_config.json):
 ```json
 {
