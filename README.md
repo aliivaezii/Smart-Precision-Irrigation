@@ -293,30 +293,48 @@ pip install -r requirements.txt
 #### 🚀 Quick Start (Recommended)
 Use the automated launcher scripts to start all services in separate terminals:
 
+```
+scripts/
+├── macos/
+│   ├── start.py    # Start all services
+│   └── stop.py     # Stop all services
+└── windows/
+    ├── start.py    # Start all services
+    └── stop.py     # Stop all services
+```
+
 **macOS:**
 ```bash
-python start_system_macos.py              # Start all services + devices
-python start_system_macos.py --no-devices # Start services only
+python scripts/macos/start.py              # Start all services + devices
+python scripts/macos/start.py --no-devices # Start services only
 ```
 
 **Windows:**
 ```bash
-python start_system_windows.py              # Start all services + devices
-python start_system_windows.py --no-devices # Start services only
-python start_system_windows.py --powershell # Use PowerShell instead of cmd
+python scripts\windows\start.py              # Start all services + devices
+python scripts\windows\start.py --no-devices # Start services only
+python scripts\windows\start.py --powershell # Use PowerShell instead of cmd
 ```
+
+**Launcher Script Features:**
+| Feature | Description |
+|---------|-------------|
+| Auto-detect Python | Finds virtual environment or system Python |
+| Ordered Startup | Services start in correct dependency order |
+| Startup Delays | Waits between services for proper initialization |
+| Named Windows | Each terminal has a descriptive title |
 
 #### 🛑 Stop the System
 **macOS:**
 ```bash
-python stop_system_macos.py         # Stop all services (with confirmation)
-python stop_system_macos.py --force # Stop without confirmation
+python scripts/macos/stop.py         # Stop all services (with confirmation)
+python scripts/macos/stop.py --force # Stop without confirmation
 ```
 
 **Windows:**
 ```bash
-python stop_system_windows.py         # Stop all services (with confirmation)
-python stop_system_windows.py --force # Stop without confirmation
+python scripts\windows\stop.py         # Stop all services (with confirmation)
+python scripts\windows\stop.py --force # Stop without confirmation
 ```
 
 #### 📋 Manual Start (Alternative)
@@ -326,22 +344,25 @@ If you prefer to start services manually in separate terminals:
 # Terminal 1: Catalogue (must start first)
 python src/services/catalogue/service.py
 
-# Terminal 2: Weather Check
+# Terminal 2: Status Service
+python src/services/status_service/service.py
+
+# Terminal 3: Weather Check
 python src/services/weather_check/service.py
 
-# Terminal 3: Water Manager (auto-discovers devices)
+# Terminal 4: Water Manager (auto-discovers devices)
 python src/services/water_manager/service.py
 
-# Terminal 4: Telegram Bot
+# Terminal 5: Telegram Bot
 python src/services/telegram_bot/service.py
 
-# Terminal 5: ThingSpeak Adaptor
+# Terminal 6: ThingSpeak Adaptor
 python src/services/thingspeak_adaptor/service.py
 
-# Terminal 6: Sensor Node (specify garden_id and field_id)
+# Terminal 7: Sensor Node (specify garden_id and field_id)
 python src/devices/sensor_node.py garden_1 field_1
 
-# Terminal 7: Actuator Node (specify garden_id and field_id)
+# Terminal 8: Actuator Node (specify garden_id and field_id)
 python src/devices/actuator_node.py garden_1 field_1
 
 # Start additional sensors/actuators for other fields:
@@ -440,5 +461,5 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ---
 
-*Last Updated: Jan 2025*  
+*Last Updated: Jan 2026*  
 *System Version: 2.2*
