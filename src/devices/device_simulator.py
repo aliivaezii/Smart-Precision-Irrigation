@@ -201,6 +201,33 @@ def get_devices():
     return response.json()
 
 
+def register_default_devices():
+    """Register default devices if none exist."""
+    devices = get_devices()
+    
+    if len(devices) > 0:
+        print(f"Found {len(devices)} existing device(s), skipping auto-registration.")
+        return
+    
+    print("No devices found. Registering default devices...")
+    
+    # Default devices to register
+    default_devices = [
+        {"type": "sensor", "garden_id": "garden_1", "field_id": "field_1", "name": "Sensor Garden 1 Field 1"},
+        {"type": "actuator", "garden_id": "garden_1", "field_id": "field_1", "name": "Valve Garden 1 Field 1"},
+    ]
+    
+    for device in default_devices:
+        try:
+            response = requests.post(CATALOGUE_URL + "devices", json=device)
+            result = response.json()
+            print(f"  Registered: {result.get('id', 'unknown')}")
+        except Exception as e:
+            print(f"  Failed to register {device['type']}: {e}")
+    
+    print()
+
+
 def main():
     """Main function - discovers and simulates all devices."""
     
@@ -229,6 +256,9 @@ def main():
     
     print(f"Broker: {broker}:{port}")
     print()
+    
+    # Register default devices if none exist
+    register_default_devices()
     
     # Keep track of active simulators
     sensors = {}      # device_id -> SensorSimulator
