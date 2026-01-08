@@ -9,13 +9,11 @@ processes that match the service script names.
 Usage:
     python scripts/macos/stop.py         # Stop with confirmation
     python scripts/macos/stop.py --force # Stop without confirmation
-    python scripts/macos/stop.py --help  # Show all options
+    python scripts/macos/stop.py --force # Stop without asking
 """
 
 import subprocess
 import sys
-import argparse
-from typing import List, Tuple
 
 # Service script names to look for
 SERVICE_PATTERNS = [
@@ -25,19 +23,18 @@ SERVICE_PATTERNS = [
     "telegram_bot/service.py",
     "thingspeak_adaptor/service.py",
     "status/service.py",
+    "device_simulator.py",
     "sensor_node.py",
     "actuator_node.py",
 ]
 
 
-def find_service_processes() -> List[Tuple[str, str]]:
+def find_service_processes():
     """
     Finds all running Python processes that match our service scripts.
-    
-    Returns:
-        List of tuples: (pid, command_line)
+    Returns a list of tuples: (pid, command_line)
     """
-    processes: List[Tuple[str, str]] = []
+    processes = []
     
     try:
         result = subprocess.run(
@@ -58,17 +55,15 @@ def find_service_processes() -> List[Tuple[str, str]]:
                         break
     
     except subprocess.CalledProcessError as e:
-        print(f"❌ Error finding processes: {e}")
+        print(f"Error finding processes: {e}")
     
     return processes
 
 
-def stop_processes(processes: List[Tuple[str, str]], force: bool = False) -> None:
+def stop_processes(processes, force=False):
     """
     Stops the given processes.
-    
-    Args:
-        processes: List of (pid, command_line) tuples
+    processes: List of (pid, command_line) tuples
         force: If True, skip confirmation
     """
     if not processes:
@@ -128,33 +123,30 @@ def stop_processes(processes: List[Tuple[str, str]], force: bool = False) -> Non
     print()
 
 
+
+
 def main():
-    parser = argparse.ArgumentParser(
-        description="Stop Smart Precision Irrigation System (macOS)",
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog="""
-Examples:
-  python scripts/macos/stop.py         Stop with confirmation prompt
-  python scripts/macos/stop.py -f      Stop without confirmation
-        """
-    )
-    parser.add_argument(
-        "--force", "-f",
-        action="store_true",
-        help="Stop services without confirmation"
-    )
+    """
+    Main function - stops all services.
     
-    args = parser.parse_args()
-    
+    Usage:
+        python scripts/macos/stop.py         # Stop with confirmation
+        python scripts/macos/stop.py --force # Stop without confirmation
+    """
     # Check platform
     if sys.platform != "darwin":
-        print("❌ This script is for macOS only.")
-        print("   For Windows: python scripts/windows/stop.py")
+        print("This script is for macOS only.")
+        print("For Windows: python scripts/windows/stop.py")
         sys.exit(1)
+    
+    # Check for --force flag
+    force = False
+    if len(sys.argv) > 1 and sys.argv[1] in ["--force", "-f"]:
+        force = True
     
     # Find and stop processes
     processes = find_service_processes()
-    stop_processes(processes, force=args.force)
+    stop_processes(processes, force=force)
 
 
 if __name__ == "__main__":
