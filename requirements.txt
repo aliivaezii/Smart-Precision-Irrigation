@@ -11,6 +11,3 @@ cherrypy>=18.8.0          # REST API framework for Catalogue and Status Service
 # ==================== Telegram Bot ====================
 telepot>=12.7             # Telegram Bot API wrapper
 
-# ==================== Optional (for future analytics) ====================
-# pandas>=2.0.0           # Data processing (uncomment if needed)
-# numpy>=1.24.0           # Numerical operations (uncomment if needed)
