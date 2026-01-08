@@ -42,28 +42,6 @@ Running on a **Raspberry Pi 5** Gateway, communicating via **MQTT** and **REST**
 
 ---
 
-## 🏛️ Device Architecture
-
-The system uses **Object-Oriented inheritance** to avoid code duplication between sensors and actuators:
-
-```
-BaseDevice (common logic)
-    ├── BaseSensor → SensorNode
-    └── BaseActuator → ActuatorNode
-```
-
-| Class | File | Purpose |
-|-------|------|---------|
-| `BaseDevice` | `src/devices/base_device.py` | Bootstrap, register, heartbeat, MQTT setup |
-| `BaseSensor` | `src/devices/base_device.py` | Sensing loop, publish readings |
-| `BaseActuator` | `src/devices/base_device.py` | Command handling, status publishing |
-| `SensorNode` | `src/devices/sensor_node.py` | Implements `sense()` for soil/temp |
-| `ActuatorNode` | `src/devices/actuator_node.py` | Implements valve control logic |
-
-**Why inheritance?** Sensor and actuator nodes share 80% of their code (bootstrap, registration, heartbeat, MQTT). Base classes handle the common logic, so device files only implement their unique behavior.
-
----
-
 ## 📡 Device Registration
 
 Both sensors and actuators register themselves with the Catalogue:
@@ -81,8 +59,6 @@ result = res.json()  # {"status": "registered"}
 ```
 
 Devices send heartbeats every ~60 seconds to keep registration alive.
-
----
 
 ---
 
@@ -140,6 +116,7 @@ You can register new devices manually using **Postman** or any REST client by se
 ```json
 {"status": "registered", "id": "sensor_node_field_2"}
 ```
+
 ---
 
 ## 📊 SenML Message Format
