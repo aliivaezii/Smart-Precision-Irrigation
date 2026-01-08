@@ -24,7 +24,7 @@ SERVICE_PATTERNS = [
     "water_manager\\service.py",
     "telegram_bot\\service.py",
     "thingspeak_adaptor\\service.py",
-    "status_service\\service.py",
+    "status\service.py",
     "sensor_node.py",
     "actuator_node.py",
 ]
