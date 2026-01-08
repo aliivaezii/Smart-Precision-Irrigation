@@ -141,6 +141,20 @@ You can register new devices manually using **Postman** or any REST client. The 
 
 > **Note**: The Catalogue generates a unique ID and MQTT topics automatically. The Water Manager auto-discovers new devices every 60 seconds.
 
+### ⚠️ Important: Running Registered Devices
+
+Registering a device via POST only creates its **configuration** in the Catalogue. To actually **run** the device (publish sensor data or respond to actuator commands), you must start a Python process:
+
+```bash
+# After registering a sensor for garden_1/field_3:
+python src/devices/sensor_node.py garden_1 field_3
+
+# After registering an actuator for garden_1/field_3:
+python src/devices/actuator_node.py garden_1 field_3
+```
+
+**Why?** In a real IoT deployment, each device is a physical microcontroller. The Python scripts simulate these devices. The POST registration pre-configures the Catalogue, but the device process must run to publish/receive MQTT messages.
+
 ---
 
 ## 🏡 Multiple Gardens Support
