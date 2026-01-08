@@ -35,11 +35,11 @@ Running on **Raspberry Pi Pico 2 W** microcontrollers:
 ### 2. The Service Layer (Core Logic)
 Running on a **Raspberry Pi 5** Gateway, communicating via **MQTT** and **REST**:
 * **Resource Catalogue (port 8080):** Central registry with full CRUD (GET/POST/PUT/DELETE) for devices.
-* **Status Service (port 9090):** Caches all device states, provides REST API for status queries.
+* **Status Service (port 9090):** Caches all device states with smart payload merging (combines soil_moisture + temperature from same sensor). Provides REST API for status queries.
 * **Water Manager:** The brain of the operation. Uses **smart irrigation logic** based on crop type and field size.
 * **Weather-Check:** Background service polling Open-Meteo for rain AND frost forecasts.
 * **Telegram Bot:** Sends weather alerts and allows users to view system status.
-* **ThingSpeak Adaptor:** Uploads sensor data from Field 1 to the cloud for visualization.
+* **ThingSpeak Adaptor:** Uploads sensor data from Field 1 to the cloud using wildcard MQTT subscriptions (works even when devices register after startup).
 
 ---
 
@@ -145,10 +145,16 @@ You can register new devices manually using **Postman** or any REST client. The 
 
 The **Device Simulator** automatically discovers and simulates ALL registered devices. No need to manually run individual device scripts!
 
+**Key Features:**
+- **Auto-Registration:** If no devices exist, automatically registers a default sensor and actuator for `garden_1/field_1`
+- **Auto-Discovery:** Polls the Catalogue every 60 seconds to find new devices
+- **Parallel Simulation:** Runs multiple sensors and actuators simultaneously in separate threads
+
 **How it works:**
-1. POST a new device to `/devices` (e.g., via Postman)
-2. The Device Simulator detects it within 60 seconds
-3. Starts simulating it automatically (publishing sensor data or listening for commands)
+1. On startup, checks if any devices exist in the Catalogue
+2. If none exist, registers default devices (sensor + actuator for garden_1/field_1)
+3. Starts simulating all registered devices
+4. Every 60 seconds, checks for newly added devices and simulates them too
 
 **Running the Device Simulator:**
 ```bash
