@@ -173,7 +173,15 @@ class TelegramBot:
             if isinstance(payload, list):
                 for item in payload:
                     name = item.get('n', '')
-                    value = item.get('v', 'N/A')
+                    # SenML value fields: 'v' (numeric), 'vs' (string), 'vb' (boolean)
+                    if 'v' in item:
+                        value = item['v']
+                    elif 'vs' in item:
+                        value = item['vs']
+                    elif 'vb' in item:
+                        value = item['vb']
+                    else:
+                        value = 'N/A'
                     line = self.format_measurement(name, value)
                     if line:
                         lines.append(line)
