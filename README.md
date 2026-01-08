@@ -359,7 +359,7 @@ If you prefer to start services manually in separate terminals:
 python src/services/catalogue/service.py
 
 # Terminal 2: Status Service
-python src/services/status_service/service.py
+python src/services/status/service.py
 
 # Terminal 3: Weather Check
 python src/services/weather_check/service.py
@@ -406,7 +406,7 @@ The system uses `config/system_config.json` for centralized configuration:
     },
     "services": {
         "catalogue": {"host": "localhost", "port": 8080},
-        "status_service": {"host": "localhost", "port": 9090}
+        "status": {"host": "localhost", "port": 9090}
     },
     "settings": {
         "moisture_threshold": 30.0,
