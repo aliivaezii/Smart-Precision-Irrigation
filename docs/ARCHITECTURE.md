@@ -60,64 +60,107 @@ System
 
 ## 2. Architecture Diagram
 
+### 2.1 Legend
+
+| Symbol | Meaning |
+|--------|---------|
+| **●───** | REST Web Services (Provider) |
+| **───➝** | REST Web Services (Consumer) |
+| **- - -** | MQTT Communication |
+| **(1)** | MQTT Publisher |
+| **(2)** | MQTT Subscriber |
+
+### 2.2 System Architecture
+
 ```
-┌─────────────────────────────────────────────────────────────────────────────────┐
-│                              CLOUD LAYER                                        │
-│  ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐              │
-│  │   Open-Meteo    │    │   ThingSpeak    │    │    Telegram     │              │
-│  │   Weather API   │    │   Cloud IoT     │    │    Bot API      │              │
-│  └────────▲────────┘    └────────▲────────┘    └────────▲────────┘              │
-│           │ REST                 │ REST                 │ REST                  │
-└───────────┼──────────────────────┼──────────────────────┼───────────────────────┘
-            │                      │                      │
-┌───────────┼──────────────────────┼──────────────────────┼───────────────────────┐
-│           │              SERVICE LAYER (Gateway)        │                        │
-│  ┌────────┴────────┐    ┌────────┴────────┐    ┌───────┴─────────┐              │
-│  │  Weather Check  │    │ThingSpeak Adaptor│   │   Telegram Bot  │              │
-│  │    Service      │    │     Service      │    │     Service     │              │
-│  └────────┬────────┘    └────────▲────────┘    └────────▲────────┘              │
-│           │ MQTT                 │ MQTT                 │ MQTT + REST           │
-│           ▼                      │                      │                       │
-│  ┌─────────────────────────────────────────────────────────────────────┐        │
-│  │                        MQTT BROKER                                   │        │
-│  │                    (broker.hivemq.com:1883)                          │        │
-│  └───────────────────────────────▲─────────────────────────────────────┘        │
-│                                  │                                              │
-│  ┌────────┬──────────────────────┼──────────────────────┬────────┐              │
-│  │        │ MQTT                 │ MQTT                 │ MQTT   │              │
-│  │        ▼                      ▼                      ▼        │              │
-│  │  ┌───────────┐         ┌───────────────┐      ┌───────────┐   │              │
-│  │  │Water      │◄────────│  Catalogue    │◄─────│  Status   │   │              │
-│  │  │Manager    │  REST   │   Service     │ REST │  Service  │   │              │
-│  │  │(Controller)│        │  (Registry)   │      │  (Cache)  │   │              │
-│  │  └─────┬─────┘         └───────────────┘      └─────▲─────┘   │              │
-│  │        │ MQTT                   ▲                   │ MQTT    │              │
-│  │        ▼                        │ REST              │         │              │
-│  │  ┌───────────┐                  │              ┌────┴────┐    │              │
-│  │  │ Actuator  │◄─────────────────┘              │ Sensor  │    │              │
-│  │  │ (Valve)   │                                 │  Node   │    │              │
-│  │  └───────────┘                                 └─────────┘    │              │
-│  └───────────────────────────────────────────────────────────────┘              │
-└─────────────────────────────────────────────────────────────────────────────────┘
-            │
-┌───────────┴─────────────────────────────────────────────────────────────────────┐
-│                              EDGE LAYER                                         │
-│  ┌─────────────────┐                        ┌─────────────────┐                 │
-│  │  Raspberry Pi   │                        │  Raspberry Pi   │                 │
-│  │   Pico 2 W      │                        │   Pico 2 W      │                 │
-│  │ (Sensor Node)   │                        │ (Actuator Node) │                 │
-│  │                 │                        │                 │                 │
-│  │ • Soil Moisture │                        │ • Solenoid Valve│                 │
-│  │ • Temperature   │                        │   (Gravity-Fed) │                 │
-│  └─────────────────┘                        └─────────────────┘                 │
-│                                                                                 │
-│  ┌─────────────────────────────────────────────────────────────┐                │
-│  │              GRAVITY-FED WATER TANK (Elevated)              │                │
-│  │  • No pump required - water flows by gravity                │                │
-│  │  • Energy-efficient operation                               │                │
-│  └─────────────────────────────────────────────────────────────┘                │
-└─────────────────────────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────────────────────────┐
+│                                 EXTERNAL SERVICES                                    │
+│                                                                                      │
+│   ┌─────────────────┐                                    ┌─────────────────┐         │
+│   │   Open-Meteo    │                                    │   ThingSpeak    │         │
+│   │      API        │                                    │    Platform     │         │
+│   └────────▲────────┘                                    └────────▲────────┘         │
+│            │ REST                                                 │ REST             │
+└────────────┼─────────────────────────────────────────────────────┼──────────────────┘
+             │                                                      │
+┌────────────┼──────────────────────────────────────────────────────┼──────────────────┐
+│            │                    GATEWAY SERVICES                  │                   │
+│            │                    (Raspberry Pi 5)                  │                   │
+│   ┌────────┴────────┐                                    ┌───────┴─────────┐         │
+│   │  Weather Check  │                                    │ ThingSpeak      │         │
+│   │      (1)        │                                    │ Adaptor (2)     │         │
+│   └────────┬────────┘                                    └───────▲─────────┘         │
+│            │                                                     │                   │
+│            │ MQTT publish                            MQTT sub    │                   │
+│            ▼                                                     │                   │
+│   ┌──────────────────────────────────────────────────────────────┴──────────────┐   │
+│   │                                                                              │   │
+│   │                            MESSAGE BROKER                                    │   │
+│   │                       (broker.hivemq.com:1883)                               │   │
+│   │                                                                              │   │
+│   └──────────────────────────────▲───────────────────────────────▲──────────────┘   │
+│                                  │                               │                   │
+│           ┌──────────────────────┼───────────────────────────────┼────────┐         │
+│           │                      │                               │        │         │
+│   ┌───────┴───────┐     ┌───────┴───────┐             ┌─────────┴────────┐         │
+│   │ Water Manager │     │Status Service │             │   Telegram Bot   │         │
+│   │    (1,2)      │     │   (buffer) 2  │             │                  │         │
+│   │               │     │               │             │                  │         │
+│   │ ┌───────────┐ │     └───────●───────┘             └──────────────────┘         │
+│   │ │ Control   │ │             │                            │   │                  │
+│   │ │ Strategy  │ │             │ REST API                   │   │                  │
+│   │ └───────────┘ │             │                            │   │                  │
+│   └───────┬───────┘             │                            │   │                  │
+│           │                     │                            │   │                  │
+│           │ REST ───────────────┼────────────────────────────┘   │                  │
+│           │                     │                                │                  │
+│           ▼                     │                                │                  │
+│   ┌───────●───────┐             │                                │                  │
+│   │   Catalogue   │◄────────────┼────────────────────────────────┘                  │
+│   │   (Registry)  │             │                                                   │
+│   └───────▲───────┘             │                                                   │
+│           │                     │                                                   │
+└───────────┼─────────────────────┼───────────────────────────────────────────────────┘
+            │ REST                │ REST
+            │                     │
+┌───────────┼─────────────────────┼───────────────────────────────────────────────────┐
+│           │    DEVICE CONNECTORS (Raspberry Pi Pico 2 W)        │                   │
+│           │                                                     │                   │
+│   ┌───────┴──────────┐                               ┌──────────┴───────┐           │
+│   │ Sensors (1)      │                               │ Actuators (2)    │           │
+│   │                  │ - - MQTT pub - - ►            │                  │           │
+│   │ • Soil Moisture  │                  ┌────────────│ • Solenoid Valve │           │
+│   │ • Temperature    │                  │            │   (Gravity-Fed)  │           │
+│   └──────────────────┘                  │            └──────────────────┘           │
+│                                         │                                           │
+│                                         │ ◄ - - MQTT sub (valve_cmd) - -            │
+│                                         │                                           │
+│   ┌──────────────────────────────────────────────────────────────────────┐          │
+│   │                GRAVITY-FED WATER TANK (Elevated)                     │          │
+│   │   • No pump required - water flows by gravity                        │          │
+│   │   • Energy-efficient operation                                       │          │
+│   └──────────────────────────────────────────────────────────────────────┘          │
+└─────────────────────────────────────────────────────────────────────────────────────┘
 ```
+
+### 2.3 Communication Flow Summary
+
+| From | To | Protocol | Description |
+|------|----|----------|-------------|
+| All Services | Catalogue | REST | Bootstrap configuration |
+| Weather Check | Message Broker | MQTT Pub | Rain/Frost alerts |
+| Weather Check | Open-Meteo | REST | Weather forecast data |
+| Sensors | Message Broker | MQTT Pub | Soil moisture & temperature |
+| Sensors | Catalogue | REST | Device registration |
+| Actuators | Message Broker | MQTT Sub | Valve commands |
+| Actuators | Catalogue | REST | Device registration |
+| Water Manager | Message Broker | MQTT Pub/Sub | Commands out, sensor data in |
+| Status Service | Message Broker | MQTT Sub | Cache all device data |
+| Status Service | Telegram Bot | REST | Status queries |
+| ThingSpeak Adaptor | Message Broker | MQTT Sub | Sensor data |
+| ThingSpeak Adaptor | ThingSpeak | REST | Cloud upload |
+| Telegram Bot | Catalogue | REST | Configuration |
+| Telegram Bot | Status Service | REST | Device status |
 
 ---
 
@@ -1074,36 +1117,94 @@ if isinstance(data, list):
 
 ## 6. Service Roles (Provider/Consumer)
 
-### Service Provider vs Consumer Matrix
+This section documents the communication roles of each component based on the architecture diagram.
 
-| Component | REST Provider | REST Consumer | MQTT Publisher | MQTT Subscriber |
-|-----------|:-------------:|:-------------:|:--------------:|:---------------:|
-| **Catalogue Service** | ✅ | ❌ | ❌ | ❌ |
-| **Status Service** | ✅ | ✅ | ❌ | ✅ |
-| **Sensor Node** | ❌ | ✅ | ✅ | ❌ |
-| **Actuator Node** | ❌ | ✅ (POST) | ✅ | ✅ |
-| **Water Manager** | ❌ | ✅ | ✅ | ✅ |
-| **Weather Check** | ❌ | ✅ | ✅ | ❌ |
-| **Telegram Bot** | ❌ | ✅ | ❌ | ✅ |
-| **ThingSpeak Adaptor** | ❌ | ✅ | ❌ | ✅ |
+### 6.1 Legend
 
-### Detailed Role Analysis
+| Symbol | Meaning |
+|--------|---------|
+| **●** | REST Web Services (Provider) - Exposes REST API |
+| **➝** | REST Web Services (Consumer) - Calls REST API |
+| **(1)** | MQTT Publisher - Publishes messages to broker |
+| **(2)** | MQTT Subscriber - Subscribes to messages from broker |
+| **- - -** | MQTT Communication (dashed line in diagram) |
+| **───** | REST Communication (solid line in diagram) |
 
-#### Pure Service Providers:
-- **Catalogue Service**: Provides configuration data and device registration via REST API
+### 6.2 Service Provider vs Consumer Matrix
 
-#### REST and MQTT Providers:
-- **Status Service**: Provides cached device status via REST, subscribes to all device topics via MQTT
+| Component | REST Provider ● | REST Consumer ➝ | MQTT Pub (1) | MQTT Sub (2) |
+|-----------|:---------------:|:---------------:|:------------:|:------------:|
+| **Catalogue** | ✅ | ❌ | ❌ | ❌ |
+| **Water Manager** | ❌ | ✅ | ✅ (1,2) | ✅ (1,2) |
+| **Sensors (RPi)** | ❌ | ✅ | ✅ (1) | ❌ |
+| **Actuators (RPi)** | ❌ | ✅ | ❌ | ✅ (2) |
+| **Status Service** | ✅ | ✅ | ❌ | ✅ (2) |
+| **Weather Check** | ❌ | ✅ | ✅ (1) | ❌ |
+| **ThingSpeak Adaptor** | ❌ | ✅ | ❌ | ✅ (2) |
+| **Telegram Bot** | ❌ | ✅ | ❌ | ❌ |
 
-#### Pure Service Consumers:
-- **ThingSpeak Adaptor**: Only consumes data (MQTT) and forwards to cloud
+> **Note on Telegram Bot**: According to the architecture diagram, Telegram Bot uses **REST only** to communicate with:
+> - Catalogue (bootstrap configuration)
+> - Status Service (device status retrieval)
+> 
+> However, the **actual implementation** also subscribes to MQTT weather/frost alert topics for real-time notifications. This is an enhancement beyond the diagram design.
 
-#### Hybrid (Provider & Consumer):
-- **Water Manager**: Consumes sensor data, provides valve commands
-- **Weather Check**: Consumes external API, provides alerts (rain + frost)
-- **Sensor Node**: Consumes config, provides sensor readings
-- **Actuator Node**: Consumes commands, provides status + resource usage
-- **Telegram Bot**: Consumes alerts (MQTT) + device status (REST from Status Service), provides user notifications
+> **Note on Actuators**: In the diagram, actuators only subscribe (2). In the **actual implementation**, actuators also publish valve_status and resource_usage data. This is documented in Section 5.4.
+
+### 6.3 Detailed Role Analysis
+
+#### Pure REST Providers:
+- **Catalogue Service**: Central registry providing configuration data and device registration via REST API. All other services bootstrap from this.
+
+#### REST Provider + MQTT Subscriber:
+- **Status Service (buffer)**: Provides cached device status via REST (port 9090), subscribes to all device topics via MQTT to maintain the cache.
+
+#### MQTT Publisher Only:
+- **Sensors (RPi)**: Publish sensor readings (soil_moisture, temperature) via MQTT. Consume REST only for registration.
+- **Weather Check**: Publishes weather alerts (rain/frost) via MQTT. Consumes REST from Catalogue and Open-Meteo API.
+
+#### MQTT Subscriber Only:
+- **Actuators (RPi)**: Subscribe to valve commands via MQTT. Consume REST for registration. (Also publish status in actual implementation)
+- **ThingSpeak Adaptor**: Subscribes to sensor data via MQTT, uploads to ThingSpeak cloud via REST.
+
+#### Hybrid (Publisher & Subscriber):
+- **Water Manager (1,2)**: The "brain" of the system with Control Strategy. Subscribes to sensor data and weather alerts, publishes valve commands.
+
+### 6.4 Control Strategy
+
+As shown in the diagram, the **Control Strategy** is integrated within the **Water Manager** service. It:
+1. Receives sensor data (MQTT subscriber)
+2. Receives weather alerts (MQTT subscriber)
+3. Makes irrigation decisions based on:
+   - Soil moisture vs threshold
+   - Weather conditions (rain/frost)
+   - Crop type and field configuration
+4. Sends valve commands (MQTT publisher)
+
+### 6.5 Design vs Implementation Notes
+
+The following table documents differences between the **architecture diagram** and the **actual implementation**:
+
+| Component | Diagram Design | Actual Implementation | Status |
+|-----------|----------------|----------------------|--------|
+| **Telegram Bot** | REST only (no MQTT) | Subscribes to MQTT alerts (weather/frost) | ⚡ Enhanced |
+| **Actuators** | MQTT Subscriber only (2) | Also publishes valve_status and water_liters | ⚡ Enhanced |
+| **Status Service** | REST Provider with MQTT Sub | Same as diagram | ✅ Match |
+| **Control Strategy** | Separate box in diagram | Integrated in Water Manager | ✅ Match (logical grouping) |
+
+**Legend:**
+- ✅ Match = Implementation matches diagram design
+- ⚡ Enhanced = Implementation adds extra features beyond diagram
+
+**Rationale for Enhancements:**
+
+1. **Telegram Bot MQTT Subscription**: While the diagram shows REST-only communication, the implementation subscribes to MQTT alert topics for **real-time notifications**. This eliminates the need for polling and provides instant alerts to users.
+
+2. **Actuator MQTT Publishing**: Beyond just receiving commands, actuators publish:
+   - `valve_status` - Reports current valve state (OPEN/CLOSED)
+   - `water_liters` - Reports resource consumption when valve closes
+   
+   This enables monitoring and analytics without polling the device.
 
 ---
 
