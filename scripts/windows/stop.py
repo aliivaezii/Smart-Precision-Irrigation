@@ -3,19 +3,15 @@
 Smart Precision Irrigation System - Windows Stop Script
 ========================================================
 
-Stops all running Python services by finding and terminating
-processes that match the service script names.
+Stops all running Python services.
 
 Usage:
-    python scripts\\windows\\stop.py         # Stop with confirmation
-    python scripts\\windows\\stop.py --force # Stop without confirmation
-    python scripts\\windows\\stop.py --help  # Show all options
+    python scripts\\windows\\stop.py           # Stop with confirmation
+    python scripts\\windows\\stop.py --force   # Stop without confirmation
 """
 
 import subprocess
 import sys
-import argparse
-from typing import List, Tuple
 
 # Service script names to look for
 SERVICE_PATTERNS = [
@@ -24,20 +20,16 @@ SERVICE_PATTERNS = [
     "water_manager\\service.py",
     "telegram_bot\\service.py",
     "thingspeak_adaptor\\service.py",
-    "status\service.py",
+    "status\\service.py",
+    "device_simulator.py",
     "sensor_node.py",
     "actuator_node.py",
 ]
 
 
-def find_service_processes() -> List[Tuple[str, str]]:
-    """
-    Finds all running Python processes that match our service scripts.
-    
-    Returns:
-        List of tuples: (pid, command_line)
-    """
-    processes: List[Tuple[str, str]] = []
+def find_service_processes():
+    """Find all running Python processes that match our services."""
+    processes = []
     
     try:
         # Use WMIC to find Python processes
@@ -70,14 +62,8 @@ def find_service_processes() -> List[Tuple[str, str]]:
     return processes
 
 
-def stop_processes(processes: List[Tuple[str, str]], force: bool = False) -> None:
-    """
-    Stops the given processes.
-    
-    Args:
-        processes: List of (pid, command_line) tuples
-        force: If True, skip confirmation
-    """
+def stop_processes(processes, force=False):
+    """Stop the given processes."""
     if not processes:
         print()
         print("✅ No Smart Irrigation services are currently running.")
@@ -139,22 +125,9 @@ def stop_processes(processes: List[Tuple[str, str]], force: bool = False) -> Non
 
 
 def main():
-    parser = argparse.ArgumentParser(
-        description="Stop Smart Precision Irrigation System (Windows)",
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog="""
-Examples:
-  python scripts\\windows\\stop.py         Stop with confirmation prompt
-  python scripts\\windows\\stop.py -f      Stop without confirmation
-        """
-    )
-    parser.add_argument(
-        "--force", "-f",
-        action="store_true",
-        help="Stop services without confirmation"
-    )
-    
-    args = parser.parse_args()
+    """Main function."""
+    # Check for --force flag
+    force = "--force" in sys.argv or "-f" in sys.argv
     
     # Check platform
     if sys.platform != "win32":
@@ -164,7 +137,7 @@ Examples:
     
     # Find and stop processes
     processes = find_service_processes()
-    stop_processes(processes, force=args.force)
+    stop_processes(processes, force=force)
 
 
 if __name__ == "__main__":
