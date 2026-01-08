@@ -543,14 +543,33 @@ water_liters = (flow_rate_lpm * duration_sec) / 60.0
 
 **Why This Exists**:
 When you register a device via POST (e.g., from Postman), the Catalogue creates the record and the Water Manager starts subscribing - but no actual data gets published because there's no physical device running. The Device Simulator solves this by:
-1. Polling the Catalogue every 60 seconds
-2. Discovering all registered sensors and actuators
-3. Starting simulators for each device automatically
+1. Auto-registering default devices if none exist
+2. Polling the Catalogue every 60 seconds
+3. Discovering all registered sensors and actuators
+4. Starting simulators for each device automatically
 
 **Key Features**:
+- **Auto-Registration**: If no devices exist, registers default sensor + actuator for garden_1/field_1
 - **Auto-Discovery**: Finds new devices without restart
 - **Parallel Simulation**: Runs multiple sensors/actuators in parallel threads
 - **Simple Code**: Uses basic Python constructs for educational purposes
+
+**Auto-Registration Logic**:
+```python
+def register_default_devices():
+    """Register default devices if none exist."""
+    devices = get_devices()
+    if len(devices) > 0:
+        return  # Devices exist, skip
+    
+    # Register default sensor and actuator
+    default_devices = [
+        {"type": "sensor", "garden_id": "garden_1", "field_id": "field_1"},
+        {"type": "actuator", "garden_id": "garden_1", "field_id": "field_1"},
+    ]
+    for device in default_devices:
+        requests.post(CATALOGUE_URL + "devices", json=device)
+```
 
 **How It Works**:
 ```
@@ -559,12 +578,23 @@ Device Simulator                    Catalogue
        │  GET /devices                 │
        │ ─────────────────────────────►│
        │                               │
+       │  [] (empty list)              │
+       │ ◄─────────────────────────────│
+       │                               │
+       │  POST /devices (sensor)       │
+       │ ─────────────────────────────►│
+       │  POST /devices (actuator)     │
+       │ ─────────────────────────────►│
+       │                               │
+       │  GET /devices                 │
+       │ ─────────────────────────────►│
+       │                               │
        │  [{"id": "sensor_garden_1_field_1_001", ...}, ...]
        │ ◄─────────────────────────────│
        │                               │
        │  For each device:             │
-       │  - Start SensorSimulator thread (publishes data)
-       │  - Or ActuatorSimulator thread (listens for commands)
+       │  - Start SensorSimulator thread
+       │  - Or ActuatorSimulator thread │
        │                               │
        │  Wait 60 seconds              │
        │  Check for new devices...     │
@@ -574,14 +604,17 @@ Device Simulator                    Catalogue
 ```python
 class SensorSimulator:
     """Simulates a sensor - publishes fake readings every 10 seconds."""
-    def __init__(self, device_id, garden_id, field_id, broker, port)
-    def run()  # Main loop: publish readings every 10 seconds
+    def __init__(self, device_id, topics, broker, port)
+    def publish_readings()  # Publishes soil_moisture + temperature
+    def stop()
 
 class ActuatorSimulator:
     """Simulates an actuator - listens for commands, publishes status."""
-    def __init__(self, device_id, garden_id, field_id, broker, port)
+    def __init__(self, device_id, subscribe_topics, publish_topics, broker, port)
     def notify(topic, payload)  # MQTT callback for commands
-    def run()  # Subscribes and waits for commands
+    def open_valve(duration)    # Opens valve, schedules auto-close
+    def close_valve()           # Closes valve, publishes water usage
+    def stop()
 ```
 
 **Running the Device Simulator**:
@@ -993,10 +1026,21 @@ def show_system_status(self, chat_id):
 **Target Platform**: ThingSpeak (https://thingspeak.com)
 
 **Features**:
-- Subscribes to Field 1 sensor topics
+- Uses **wildcard MQTT subscription** to catch all field_1 data
+- Works even when devices register AFTER the adaptor starts
 - Parses SenML list format
 - Buffers incoming data
 - Rate-limited uploads (ThingSpeak requires 15s between updates)
+
+**Wildcard Subscription**: Instead of subscribing to specific device topics (which requires knowing device IDs at startup), the adaptor uses a wildcard topic:
+```python
+# Subscribes to ALL messages under garden_1/field_1
+self.wildcard_topic = "smart_irrigation/farm/garden_1/field_1/#"
+```
+
+This ensures data is received even when:
+- Devices are registered via POST after the adaptor starts
+- New sensors are added dynamically during operation
 
 **Field Scope**: The adaptor focuses on Field 1 data to work within ThingSpeak's free tier limitations (8 fields per channel).
 
@@ -1024,7 +1068,7 @@ if isinstance(data, list):
 **Communication**:
 - **REST** → Catalogue (bootstrap)
 - **REST** → ThingSpeak API (data upload)
-- **MQTT Subscribe** → `farm/field_1/soil_moisture`, `farm/field_1/temperature`, `irrigation/usage`
+- **MQTT Subscribe** → `smart_irrigation/farm/garden_1/field_1/#` (wildcard), `smart_irrigation/irrigation/usage`
 
 ---
 
@@ -1698,25 +1742,39 @@ Returns field configurations for smart irrigation.
 
 **Base URL**: `http://localhost:9090`
 
+**Key Feature**: **Smart Payload Merging** - When multiple measurements from the same device arrive (e.g., soil_moisture and temperature from the same sensor), the Status Service merges them into a single payload instead of overwriting. This ensures the Telegram Bot can display all measurements for a device.
+
 #### GET /
 Returns all cached device statuses.
 
-**Response**:
+**Response** (with merged payloads):
 ```json
 {
-    "sensor_node_field_1": {
-        "topic": "smart_irrigation/farm/field_1/soil_moisture",
+    "sensor_garden_1_field_1_001": {
+        "topic": "smart_irrigation/farm/garden_1/field_1/temperature",
         "timestamp": 1703419200.0,
         "received_at": "2026-01-06 10:00:00",
-        "payload": [{"bn": "sensor_node_field_1", "n": "soil_moisture", "v": 45.2}]
+        "payload": [
+            {"bn": "sensor_garden_1_field_1_001", "n": "soil_moisture", "t": 1703419200.0, "v": 45.2},
+            {"bn": "sensor_garden_1_field_1_001", "n": "temperature", "t": 1703419200.0, "v": 22.5}
+        ]
     },
-    "actuator_valve_1": {
-        "topic": "smart_irrigation/farm/field_1/valve_status",
+    "actuator_garden_1_field_1_001": {
+        "topic": "smart_irrigation/farm/garden_1/field_1/valve_status",
         "timestamp": 1703419210.0,
         "received_at": "2026-01-06 10:00:10",
-        "payload": [{"bn": "actuator_valve_1", "n": "valve_state", "v": "OPEN"}]
+        "payload": [{"bn": "actuator_garden_1_field_1_001", "n": "valve_status", "vs": "OPEN"}]
     }
 }
+```
+
+**Payload Merging Logic**:
+```python
+# When new measurement arrives for existing device:
+# 1. Get existing payload (if any)
+# 2. Create dict of measurements by name
+# 3. Update with new measurement (overwrites same name)
+# 4. Convert back to list
 ```
 
 ### 12.3 External APIs Used
