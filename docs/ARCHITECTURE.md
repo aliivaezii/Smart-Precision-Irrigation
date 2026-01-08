@@ -1681,37 +1681,48 @@ Returns all cached device statuses.
 
 ### Automated Launcher Scripts
 
-The system includes Python launcher scripts that automatically open each service in a separate terminal window.
+The system includes Python launcher scripts located in the `scripts/` directory that automatically open each service in a separate terminal window.
+
+```
+scripts/
+├── README.md           # Launcher documentation
+├── macos/
+│   ├── start.py        # Start all services (macOS)
+│   └── stop.py         # Stop all services (macOS)
+└── windows/
+    ├── start.py        # Start all services (Windows)
+    └── stop.py         # Stop all services (Windows)
+```
 
 #### macOS
 
 ```bash
 # Start all services and devices
-python start_system_macos.py
+python scripts/macos/start.py
 
 # Start services only (no sensors/actuators)
-python start_system_macos.py --no-devices
+python scripts/macos/start.py --no-devices
 
 # Stop all services
-python stop_system_macos.py
-python stop_system_macos.py --force  # Without confirmation
+python scripts/macos/stop.py
+python scripts/macos/stop.py --force  # Without confirmation
 ```
 
 #### Windows
 
 ```bash
 # Start all services and devices (Command Prompt)
-python start_system_windows.py
+python scripts\windows\start.py
 
 # Start services only
-python start_system_windows.py --no-devices
+python scripts\windows\start.py --no-devices
 
 # Use PowerShell instead of Command Prompt
-python start_system_windows.py --powershell
+python scripts\windows\start.py --powershell
 
 # Stop all services
-python stop_system_windows.py
-python stop_system_windows.py --force  # Without confirmation
+python scripts\windows\stop.py
+python scripts\windows\stop.py --force  # Without confirmation
 ```
 
 #### Launcher Script Features
@@ -1733,32 +1744,37 @@ If you prefer to start services manually:
    python src/services/catalogue/service.py
    ```
 
-2. **Weather Check Service**
+2. **Status Service**
+   ```bash
+   python src/services/status_service/service.py
+   ```
+
+3. **Weather Check Service**
    ```bash
    python src/services/weather_check/service.py
    ```
 
-3. **Water Manager Service**
+4. **Water Manager Service**
    ```bash
    python src/services/water_manager/service.py
    ```
 
-4. **Telegram Bot Service**
+5. **Telegram Bot Service**
    ```bash
    python src/services/telegram_bot/service.py
    ```
 
-5. **ThingSpeak Adaptor**
+6. **ThingSpeak Adaptor**
    ```bash
    python src/services/thingspeak_adaptor/service.py
    ```
 
-6. **Sensor Nodes** (specify garden_id and field_id)
+7. **Sensor Nodes** (specify garden_id and field_id)
    ```bash
    python src/devices/sensor_node.py garden_1 field_1
    ```
 
-7. **Actuator Nodes** (specify garden_id and field_id)
+8. **Actuator Nodes** (specify garden_id and field_id)
    ```bash
    python src/devices/actuator_node.py garden_1 field_1
    ```
@@ -1799,5 +1815,5 @@ The combination of REST and MQTT protocols provides the ideal balance between:
 ---
 
 *Document Version: 2.2*  
-*Last Updated: January 2025*  
+*Last Updated: January 2026*  
 *System Version: 2.2*
