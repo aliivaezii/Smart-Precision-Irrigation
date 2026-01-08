@@ -867,7 +867,7 @@ def show_system_status(self, chat_id):
 
 ---
 
-#### `src/services/status_service/service.py`
+#### `src/services/status/service.py`
 
 **Purpose**: Centralized device status cache with REST API. Subscribes to all device topics and provides unified access to current device states.
 
@@ -1754,7 +1754,7 @@ If you prefer to start services manually:
 
 2. **Status Service**
    ```bash
-   python src/services/status_service/service.py
+   python src/services/status/service.py
    ```
 
 3. **Weather Check Service**
