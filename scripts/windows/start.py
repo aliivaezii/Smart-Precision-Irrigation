@@ -97,10 +97,15 @@ def get_python_command() -> str:
     Determines the correct Python command to use.
     Checks for virtual environment first, then falls back to system Python.
     """
-    # Check if we're in a virtual environment
-    venv_path = os.path.join(PROJECT_ROOT, "venv", "Scripts", "python.exe")
+    # Check for .venv (standard naming)
+    venv_path = os.path.join(PROJECT_ROOT, ".venv", "Scripts", "python.exe")
     if os.path.exists(venv_path):
         return f'"{venv_path}"'
+    
+    # Check for venv (alternative naming)
+    venv_path_alt = os.path.join(PROJECT_ROOT, "venv", "Scripts", "python.exe")
+    if os.path.exists(venv_path_alt):
+        return f'"{venv_path_alt}"'
     
     # Check for python
     try:
