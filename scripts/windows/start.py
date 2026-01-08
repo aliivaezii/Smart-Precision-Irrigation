@@ -22,7 +22,6 @@ import subprocess
 import time
 import os
 import sys
-import argparse
 
 # Get the project root directory (two levels up from this script)
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -39,26 +38,12 @@ SERVICES = [
     ("ThingSpeak Adaptor", "src/services/thingspeak_adaptor/service.py", 1),
 ]
 
-# Device definitions (started after services)
-# Format: (name, relative_path, args, delay_after_start)
-DEVICES = [
-    ("Sensor Node (garden_1/field_1)", "src/devices/sensor_node.py", ["garden_1", "field_1"], 1),
-    ("Actuator Node (garden_1/field_1)", "src/devices/actuator_node.py", ["garden_1", "field_1"], 1),
-]
+# Device simulator (auto-discovers all registered devices)
+DEVICE_SIMULATOR = ("Device Simulator", "src/devices/device_simulator.py", [], 1)
 
 
-def open_cmd_with_command(title: str, command: str, working_dir: str) -> bool:
-    """
-    Opens a new Command Prompt window and runs the specified command.
-    
-    Args:
-        title: Window title for identification
-        command: The command to run in the terminal
-        working_dir: Working directory for the command
-    
-    Returns:
-        True if successful, False otherwise
-    """
+def open_cmd_with_command(title, command, working_dir):
+    """Opens a new Command Prompt window and runs the specified command."""
     try:
         full_command = f'start "{title}" cmd /K "cd /d {working_dir} && echo === {title} === && {command}"'
         subprocess.run(full_command, shell=True, check=True)
@@ -69,18 +54,8 @@ def open_cmd_with_command(title: str, command: str, working_dir: str) -> bool:
         return False
 
 
-def open_powershell_with_command(title: str, command: str, working_dir: str) -> bool:
-    """
-    Opens a new PowerShell window and runs the specified command.
-    
-    Args:
-        title: Window title for identification
-        command: The command to run in the terminal
-        working_dir: Working directory for the command
-    
-    Returns:
-        True if successful, False otherwise
-    """
+def open_powershell_with_command(title, command, working_dir):
+    """Opens a new PowerShell window and runs the specified command."""
     try:
         ps_command = f'Set-Location -Path "{working_dir}"; Write-Host "=== {title} ===" -ForegroundColor Green; {command}'
         full_command = f'start powershell -NoExit -Command "{ps_command}"'
@@ -92,11 +67,8 @@ def open_powershell_with_command(title: str, command: str, working_dir: str) -> 
         return False
 
 
-def get_python_command() -> str:
-    """
-    Determines the correct Python command to use.
-    Checks for virtual environment first, then falls back to system Python.
-    """
+def get_python_command():
+    """Determines the correct Python command to use."""
     # Check for .venv (standard naming)
     venv_path = os.path.join(PROJECT_ROOT, ".venv", "Scripts", "python.exe")
     if os.path.exists(venv_path):
@@ -124,15 +96,8 @@ def get_python_command() -> str:
     return "python"
 
 
-def start_services(python_cmd: str, include_devices: bool = True, use_powershell: bool = False) -> None:
-    """
-    Starts all services in separate terminal windows.
-    
-    Args:
-        python_cmd: Python executable to use
-        include_devices: Whether to start sensor/actuator devices
-        use_powershell: Use PowerShell instead of Command Prompt
-    """
+def start_services(python_cmd, include_devices=True, use_powershell=False):
+    """Starts all services in separate terminal windows."""
     terminal_type = "PowerShell" if use_powershell else "Command Prompt"
     open_terminal = open_powershell_with_command if use_powershell else open_cmd_with_command
     
@@ -163,18 +128,17 @@ def start_services(python_cmd: str, include_devices: bool = True, use_powershell
     # Start devices if requested
     if include_devices:
         print()
-        print("Starting Devices...")
+        print("Starting Device Simulator...")
         print("-" * 40)
         
-        for name, script_path, args, delay in DEVICES:
-            full_path = os.path.join(PROJECT_ROOT, script_path).replace("/", "\\")
-            
-            if not os.path.exists(full_path):
-                print(f"  ⚠️  Not found: {script_path}")
-                continue
-            
-            args_str = " ".join(args)
-            command = f'{python_cmd} "{full_path}" {args_str}'
+        name, script_path, args, delay = DEVICE_SIMULATOR
+        full_path = os.path.join(PROJECT_ROOT, script_path).replace("/", "\\")
+        
+        if not os.path.exists(full_path):
+            print(f"  ⚠️  Not found: {script_path}")
+        else:
+            args_str = " ".join(args) if args else ""
+            command = f'{python_cmd} "{full_path}" {args_str}'.strip()
             if open_terminal(name, command, PROJECT_ROOT):
                 time.sleep(delay)
     
@@ -188,54 +152,44 @@ def start_services(python_cmd: str, include_devices: bool = True, use_powershell
     print("     Gardens:    http://localhost:8080/gardens")
     print()
     print("  💡 Tips:")
-    print("     • Close individual windows to stop services")
-    print("     • Press Ctrl+C in a terminal to stop that service")
+    print("     • The Device Simulator auto-discovers registered devices")
+    print("     • POST new devices to /devices - they start automatically!")
     print("     • Run 'python scripts\\windows\\stop.py' to stop all")
     print("=" * 60)
     print()
 
 
+
 def main():
-    parser = argparse.ArgumentParser(
-        description="Start Smart Precision Irrigation System (Windows)",
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog="""
-Examples:
-  python scripts\\windows\\start.py              Start all services and devices
-  python scripts\\windows\\start.py --no-devices Start services only
-  python scripts\\windows\\start.py --powershell Use PowerShell terminals
-        """
-    )
-    parser.add_argument(
-        "--no-devices",
-        action="store_true",
-        help="Start services only, without sensor/actuator devices"
-    )
-    parser.add_argument(
-        "--python",
-        type=str,
-        default=None,
-        help="Path to Python executable (default: auto-detect)"
-    )
-    parser.add_argument(
-        "--powershell",
-        action="store_true",
-        help="Use PowerShell instead of Command Prompt"
-    )
+    """
+    Main function - starts all services.
     
-    args = parser.parse_args()
-    
+    Usage:
+        python scripts\\windows\\start.py              # Start all services + devices
+        python scripts\\windows\\start.py --no-devices # Start services only
+        python scripts\\windows\\start.py --powershell # Use PowerShell
+    """
     # Check platform
     if sys.platform != "win32":
-        print("❌ This script is for Windows only.")
-        print("   For macOS: python scripts/macos/start.py")
+        print("This script is for Windows only.")
+        print("For macOS: python scripts/macos/start.py")
         sys.exit(1)
     
+    # Check for flags
+    include_devices = True
+    use_powershell = False
+    
+    for arg in sys.argv[1:]:
+        if arg == "--no-devices":
+            include_devices = False
+        elif arg == "--powershell":
+            use_powershell = True
+    
     # Determine Python command
-    python_cmd = args.python if args.python else get_python_command()
+    python_cmd = get_python_command()
     
     # Start the system
-    start_services(python_cmd, include_devices=not args.no_devices, use_powershell=args.powershell)
+    start_services(python_cmd, include_devices=include_devices, use_powershell=use_powershell)
 
 
 if __name__ == "__main__":
