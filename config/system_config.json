@@ -1,7 +1,7 @@
 {
     "project_info": {
         "name": "Smart Precision Irrigation System",
-        "version": "2.1",
+        "version": "2.2",
         "description": "IoT-based precision irrigation platform for smart agriculture",
         "topic_prefix": "smart_irrigation"
     },
@@ -17,7 +17,7 @@
             "host": "localhost",
             "port": 8080
         },
-        "status_service": {
+        "status": {
             "host": "localhost",
             "port": 9090
         }
@@ -50,56 +50,42 @@
             "water_needed": "field4"
         }
     },
-    "fields": {
-        "field_1": {
-            "crop_type": "tomato",
-            "field_size_m2": 100,
-            "water_need_mm_per_day": 5.0,
-            "flow_rate_lpm": 20.0
+    "gardens": {
+        "garden_1": {
+            "name": "Main Garden",
+            "location": {"lat": 45.06, "lon": 7.66},
+            "fields": {
+                "field_1": {
+                    "crop_type": "tomato",
+                    "field_size_m2": 100,
+                    "water_need_mm_per_day": 5.0,
+                    "flow_rate_lpm": 20.0
+                },
+                "field_2": {
+                    "crop_type": "wheat",
+                    "field_size_m2": 200,
+                    "water_need_mm_per_day": 3.0,
+                    "flow_rate_lpm": 20.0
+                }
+            }
         },
-        "field_2": {
-            "crop_type": "wheat",
-            "field_size_m2": 200,
-            "water_need_mm_per_day": 3.0,
-            "flow_rate_lpm": 20.0
+        "garden_2": {
+            "name": "Secondary Garden",
+            "location": {"lat": 45.07, "lon": 7.67},
+            "fields": {
+                "field_1": {
+                    "crop_type": "lettuce",
+                    "field_size_m2": 50,
+                    "water_need_mm_per_day": 4.0,
+                    "flow_rate_lpm": 15.0
+                }
+            }
         }
     },
-    "devices": [
-        {
-            "id": "sensor_node_field_1",
-            "name": "Field 1 Soil Moisture Sensor",
-            "type": "sensor",
-            "topics": {
-                "publish": ["smart_irrigation/farm/field_1/soil_moisture", "smart_irrigation/farm/field_1/temperature"],
-                "subscribe": ["smart_irrigation/farm/field_1/config"]
-            }
-        },
-        {
-            "id": "sensor_node_field_2",
-            "name": "Field 2 Soil Moisture Sensor",
-            "type": "sensor",
-            "topics": {
-                "publish": ["smart_irrigation/farm/field_2/soil_moisture", "smart_irrigation/farm/field_2/temperature"],
-                "subscribe": ["smart_irrigation/farm/field_2/config"]
-            }
-        },
-        {
-            "id": "actuator_valve_1",
-            "name": "Field 1 Irrigation Valve",
-            "type": "actuator",
-            "topics": {
-                "publish": ["smart_irrigation/farm/field_1/valve_status"],
-                "subscribe": ["smart_irrigation/farm/field_1/valve_cmd"]
-            }
-        },
-        {
-            "id": "actuator_valve_2",
-            "name": "Field 2 Irrigation Valve",
-            "type": "actuator",
-            "topics": {
-                "publish": ["smart_irrigation/farm/field_2/valve_status"],
-                "subscribe": ["smart_irrigation/farm/field_2/valve_cmd"]
-            }
-        }
-    ]
+    "device_counters": {
+        "sensor": 0,
+        "actuator": 0
+    },
+    "devices": [],
+    "services_list": []
 }

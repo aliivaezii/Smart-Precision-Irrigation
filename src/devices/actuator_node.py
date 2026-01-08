@@ -5,8 +5,8 @@ This actuator extends BaseActuator to control solenoid valves
 in a gravity-fed irrigation system.
 
 The actuator:
-1. Bootstraps from Catalogue (via BaseActuator)
-2. Registers itself via POST (via BaseActuator)
+1. Self-registers with Catalogue (ID assigned dynamically)
+2. Bootstraps broker info from Catalogue
 3. Subscribes to command topics via MQTT
 4. Executes valve OPEN/CLOSE commands
 5. Tracks and publishes water consumption
@@ -28,27 +28,24 @@ class ActuatorNode(BaseActuator):
     # Default flow rate (can be overridden by Catalogue config)
     DEFAULT_FLOW_RATE = 20.0  # Liters per minute
     
-    def __init__(self, catalogue_url, device_id):
+    def __init__(self, catalogue_url, garden_id='garden_1', field_id='field_1'):
         """Initialize the valve actuator."""
-        # Call parent init (bootstrap, register, start MQTT)
-        super().__init__(catalogue_url, device_id)
+        # Call parent init (registers with Catalogue, gets ID, starts MQTT)
+        super().__init__(catalogue_url, garden_id=garden_id, field_id=field_id)
         
         # Valve state
         self.is_open = False
         self.last_command_time = None
         self.current_duration = 0
         
-        # Get field-specific config for flow rate
-        field_id = '_'.join(device_id.split('_')[-2:])  # e.g., "field_1"
-        fields_config = self.config.get('fields', {})
-        field_config = fields_config.get(field_id, {})
-        self.flow_rate = field_config.get('flow_rate_lpm', self.DEFAULT_FLOW_RATE)
+        # Get field-specific config for flow rate from garden config
+        self.flow_rate = self.field_config.get('flow_rate_lpm', self.DEFAULT_FLOW_RATE)
         
         # Get resource monitoring topic
         topics_config = self.config.get('topics', {})
         self.topic_resource = topics_config.get('resource_usage', 'smart_irrigation/irrigation/usage')
         
-        print(f"[{device_id}] Flow rate: {self.flow_rate} L/min")
+        print(f"[{self.device_id}] Flow rate: {self.flow_rate} L/min")
 
     def execute_command(self, command, params):
         """
@@ -153,11 +150,23 @@ class ActuatorNode(BaseActuator):
 
 
 if __name__ == '__main__':
+    import sys
     
     catalogue_url = 'http://localhost:8080/'
-    device_id = 'actuator_valve_1'
     
-    actuator = ActuatorNode(catalogue_url, device_id)
+    # Default values - can be overridden by command line arguments
+    garden_id = 'garden_1'
+    field_id = 'field_1'
+    
+    # Allow command line: python actuator_node.py garden_1 field_1
+    if len(sys.argv) >= 3:
+        garden_id = sys.argv[1]
+        field_id = sys.argv[2]
+    
+    print(f"Starting actuator for {garden_id}/{field_id}...")
+    
+    # Create actuator - ID is assigned dynamically by Catalogue
+    actuator = ActuatorNode(catalogue_url, garden_id=garden_id, field_id=field_id)
     
     try:
         actuator.run()

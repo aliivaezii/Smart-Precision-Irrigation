@@ -6,6 +6,7 @@ from MyMQTT import MyMQTT
 import time
 import requests
 import json
+import threading
 
 
 class WaterManager:
@@ -19,31 +20,36 @@ class WaterManager:
     - Crop type and field configuration
     
     All MQTT topics are dynamically loaded from Catalogue.
+    Auto-discovers new devices periodically.
     """
     
     # Crop factor: multiplier for water needs (higher = more water)
-    # Used in formula: water_needed_mm = (target - current) * crop_factor
     CROP_FACTORS = {
-        'tomato': 1.2,      # High water demand
-        'lettuce': 0.8,     # Low water demand  
-        'wheat': 0.6,       # Lower water demand
-        'corn': 1.0,        # Medium water demand
+        'tomato': 1.2,
+        'lettuce': 0.8,
+        'wheat': 0.6,
+        'corn': 1.0,
         'default': 1.0
     }
     
-    # Fallback: simple duration lookup (seconds) if config missing
+    # Fallback: simple duration lookup (seconds)
     CROP_DURATION_LOOKUP = {
-        'tomato': 600,      # 10 minutes
-        'lettuce': 300,     # 5 minutes
-        'wheat': 240,       # 4 minutes
-        'corn': 480,        # 8 minutes
-        'default': 300      # 5 minutes
+        'tomato': 600,
+        'lettuce': 300,
+        'wheat': 240,
+        'corn': 480,
+        'default': 300
     }
     
     # Target soil moisture percentage
     TARGET_MOISTURE = 70.0
     
+    # Device refresh interval (seconds)
+    REFRESH_INTERVAL = 60
+    
     def __init__(self, catalogue_url):
+        self.catalogue_url = catalogue_url
+        
         # 1. Bootstrap: Get config from Catalogue
         print(f"[WaterManager] Fetching config from {catalogue_url}...")
         res = requests.get(catalogue_url)
@@ -57,35 +63,22 @@ class WaterManager:
         settings = data.get('settings', {})
         self.moisture_threshold = settings.get('moisture_threshold', 30.0)
         
-        # Get MQTT topics from config (NO HARDCODING!)
+        # Get MQTT topics from config
         topics = data.get('topics', {})
         self.topic_weather_alert = topics.get('weather_alert', 'smart_irrigation/weather/alert')
         self.topic_frost_alert = topics.get('frost_alert', 'smart_irrigation/weather/frost')
         
-        # Get field configurations for smart irrigation
-        self.fields_config = data.get('fields', {})
+        # Get field configurations from gardens
+        self.gardens_config = data.get('gardens', {})
+        self.fields_config = self._build_fields_config()
         
         print(f"[WaterManager] Moisture threshold: {self.moisture_threshold}%")
-        print(f"[WaterManager] Alert topics: rain={self.topic_weather_alert}, frost={self.topic_frost_alert}")
-        print(f"[WaterManager] Fields configured: {list(self.fields_config.keys())}")
+        print(f"[WaterManager] Gardens configured: {list(self.gardens_config.keys())}")
         
-        # Find all sensor and actuator topics from device list
+        # Device tracking - will be refreshed periodically
         self.sensor_topics = {}
         self.actuator_topics = {}
-        self.relay_topics = {}
-        
-        for d in data['devices']:
-            if d['type'] == 'sensor':
-                for topic in d['topics']['publish']:
-                    self.sensor_topics[topic] = d['id']
-            elif d['type'] == 'actuator':
-                # Map field to valve command topic
-                valve_id = d['id']
-                field_num = valve_id.split('_')[-1]
-                self.actuator_topics[f'field_{field_num}'] = d['topics']['subscribe'][0]
-        
-        print(f"[WaterManager] Found {len(self.sensor_topics)} sensor topics")
-        print(f"[WaterManager] Found {len(self.actuator_topics)} actuators")
+        self._refresh_devices()
         
         # 2. Start MQTT with callback
         self.client = MyMQTT('water_manager', self.broker, self.port, notifier=self)
@@ -96,26 +89,100 @@ class WaterManager:
         self.memory = {}
         self.rain_alert = False
         self.frost_alert = False
+        
+        # Start device refresh thread
+        self._start_refresh_thread()
 
-    def calculate_irrigation_duration(self, field_id, current_moisture):
+    def _build_fields_config(self):
+        """Build flat fields config from gardens structure."""
+        fields = {}
+        for garden_id, garden in self.gardens_config.items():
+            for field_id, field_config in garden.get('fields', {}).items():
+                # Key: garden_id/field_id
+                key = f"{garden_id}_{field_id}"
+                fields[key] = field_config
+                # Also add legacy format
+                fields[field_id] = field_config
+        return fields
+
+    def _refresh_devices(self):
+        """Refresh device list from Catalogue (auto-discovery)."""
+        try:
+            res = requests.get(f"{self.catalogue_url}devices")
+            devices = res.json()
+            
+            old_sensor_count = len(self.sensor_topics)
+            old_actuator_count = len(self.actuator_topics)
+            
+            self.sensor_topics = {}
+            self.actuator_topics = {}
+            
+            for d in devices:
+                device_id = d['id']
+                garden_id = d.get('garden_id', 'garden_1')
+                field_id = d.get('field_id', 'field_1')
+                
+                if d['type'] == 'sensor':
+                    for topic in d['topics'].get('publish', []):
+                        self.sensor_topics[topic] = {
+                            'device_id': device_id,
+                            'garden_id': garden_id,
+                            'field_id': field_id
+                        }
+                elif d['type'] == 'actuator':
+                    # Map garden/field to valve command topic
+                    key = f"{garden_id}_{field_id}"
+                    subscribe_topics = d['topics'].get('subscribe', [])
+                    if subscribe_topics:
+                        self.actuator_topics[key] = subscribe_topics[0]
+            
+            new_sensors = len(self.sensor_topics) - old_sensor_count
+            new_actuators = len(self.actuator_topics) - old_actuator_count
+            
+            if new_sensors > 0 or new_actuators > 0:
+                print(f"[WaterManager] Device refresh: +{new_sensors} sensors, +{new_actuators} actuators")
+                # Subscribe to new sensor topics
+                self._subscribe_to_sensors()
+            
+            print(f"[WaterManager] Total: {len(self.sensor_topics)} sensors, {len(self.actuator_topics)} actuators")
+            
+        except Exception as e:
+            print(f"[WaterManager] Error refreshing devices: {e}")
+
+    def _subscribe_to_sensors(self):
+        """Subscribe to all sensor topics."""
+        for topic in self.sensor_topics.keys():
+            self.client.subscribe(topic, qos=0)
+            print(f"[WaterManager] Subscribed to {topic}")
+
+    def _start_refresh_thread(self):
+        """Start background thread to refresh devices periodically."""
+        def refresh_loop():
+            while True:
+                time.sleep(self.REFRESH_INTERVAL)
+                self._refresh_devices()
+        
+        thread = threading.Thread(target=refresh_loop, daemon=True)
+        thread.start()
+        print(f"[WaterManager] Auto-discovery enabled (every {self.REFRESH_INTERVAL}s)")
+
+    def calculate_irrigation_duration(self, garden_id, field_id, current_moisture):
         """
         Calculate irrigation duration based on crop type and moisture deficit.
         
-        Smart Formula (as per proposal):
+        Smart Formula:
         - water_needed_mm = (target_moisture - current_moisture) * crop_factor
         - total_liters = water_needed_mm * field_size_m2
         - duration_sec = total_liters / (flow_rate_lpm / 60)
-        
-        Falls back to lookup table if field config is missing.
         """
-        # Get field configuration
-        field_config = self.fields_config.get(field_id, {})
+        # Get field configuration from garden
+        field_key = f"{garden_id}_{field_id}"
+        field_config = self.fields_config.get(field_key, self.fields_config.get(field_id, {}))
         
         # If no config, use simple lookup table
         if not field_config:
-            print(f"[WaterManager] No config for {field_id}, using lookup table")
-            crop_type = 'default'
-            return self.CROP_DURATION_LOOKUP.get(crop_type, 300)
+            print(f"[WaterManager] No config for {field_key}, using default")
+            return self.CROP_DURATION_LOOKUP['default']
         
         crop_type = field_config.get('crop_type', 'default')
         field_size = field_config.get('field_size_m2', 100)
@@ -124,48 +191,23 @@ class WaterManager:
         # Get crop factor
         crop_factor = self.CROP_FACTORS.get(crop_type, self.CROP_FACTORS['default'])
         
-        # Calculate moisture deficit (how much below target)
+        # Calculate moisture deficit
         moisture_deficit = max(0, self.TARGET_MOISTURE - current_moisture)
         
-        # Smart Formula:
-        # water_needed_mm = (target - current) * crop_factor
+        # Smart Formula
         water_needed_mm = moisture_deficit * crop_factor
-        
-        # total_liters = water_needed_mm * field_size_m2 (1mm on 1m² = 1 liter)
         total_liters = water_needed_mm * field_size
-        
-        # Functionality for Publishing Water Needed Quantity per field
-        try:
-            # Construct a specific topic for this field's water requirement
-            # e.g., smart_irrigation/farm/field_1/water_needed
-            water_topic = f"smart_irrigation/farm/{field_id}/water_needed"
-            
-            payload = {
-                "bn": "water_manager",
-                "n": "water_needed",
-                "u": "L",
-                "v": round(total_liters, 2),
-                "t": time.time()
-            }
-            self.client.publish(water_topic, json.dumps(payload))
-            print(f"[WaterManager] Published estimated need: {total_liters:.2f} L to {water_topic}")
-        except Exception as e:
-            print(f"[WaterManager] Error publishing water need: {e}")
-        # ------------------------------------------
-
-        # duration_sec = total_liters / flow_rate_lps
-        # flow_rate_lps = flow_rate_lpm / 60
         flow_rate_lps = flow_rate_lpm / 60.0
         duration_seconds = total_liters / flow_rate_lps
         
         # Clamp to reasonable range (min 60s, max 30 min)
         duration_seconds = max(60, min(1800, duration_seconds))
         
-        print(f"[WaterManager] Smart calculation for {field_id}:")
+        print(f"[WaterManager] Smart calculation for {garden_id}/{field_id}:")
         print(f"    Crop: {crop_type} (factor={crop_factor}), Field: {field_size}m²")
         print(f"    Moisture: {current_moisture}% → Target: {self.TARGET_MOISTURE}%")
         print(f"    Water needed: {water_needed_mm:.1f}mm = {total_liters:.1f}L")
-        print(f"    Flow: {flow_rate_lpm}L/min → Duration: {duration_seconds:.0f}s")
+        print(f"    Duration: {duration_seconds:.0f}s")
         
         return int(duration_seconds)
 
@@ -191,17 +233,24 @@ class WaterManager:
             if isinstance(data, dict) and data.get('status') == 'ACTIVE':
                 self.frost_alert = True
                 temp = data.get('value', 'N/A')
-                print(f"[WaterManager] ❄️ Frost alert ACTIVE ({temp}°C) - irrigation suspended")
+                print(f"[WaterManager] ❄️ Frost alert ACTIVE ({temp}°C)")
             else:
                 self.frost_alert = False
                 print("[WaterManager] Frost alert cleared")
             return
         
-        # Handle sensor data in SenML format (list of measurements)
-        # Format: [{'bn': '...', 'n': 'soil_moisture', 't': ..., 'v': 25}, ...]
+        # Handle sensor data in SenML format
         if isinstance(data, list):
             device_id = None
             moisture = None
+            garden_id = None
+            field_id = None
+            
+            # Get garden/field info from sensor_topics mapping
+            sensor_info = self.sensor_topics.get(topic, {})
+            if sensor_info:
+                garden_id = sensor_info.get('garden_id', 'garden_1')
+                field_id = sensor_info.get('field_id', 'field_1')
             
             for measurement in data:
                 if 'bn' in measurement:
@@ -212,19 +261,10 @@ class WaterManager:
             if device_id and moisture is not None:
                 self.memory[device_id] = moisture
                 print(f"[WaterManager] Received: {device_id} -> moisture={moisture}%")
-                self.evaluate(device_id, moisture)
+                self.evaluate(device_id, moisture, garden_id, field_id)
             return
-        
-        # Fallback: Handle old dict format (backward compatibility)
-        if isinstance(data, dict) and 'v' in data:
-            if isinstance(data['v'], dict) and 'soil_moisture' in data['v']:
-                device_id = data.get('bn', 'unknown')
-                moisture = data['v']['soil_moisture']
-                self.memory[device_id] = moisture
-                print(f"[WaterManager] Received: {device_id} -> moisture={moisture}%")
-                self.evaluate(device_id, moisture)
 
-    def evaluate(self, device_id, moisture):
+    def evaluate(self, device_id, moisture, garden_id, field_id):
         """
         Smart decision logic:
         - Irrigate if moisture < threshold AND no weather alerts
@@ -234,45 +274,40 @@ class WaterManager:
         weather_ok = not self.rain_alert and not self.frost_alert
         
         if needs_water and weather_ok:
-            # Find field from device_id (e.g., sensor_node_field_1 -> field_1)
-            parts = device_id.split('_')
-            if len(parts) >= 3:
-                field_id = f"{parts[-2]}_{parts[-1]}"
-            else:
-                field_id = "field_1"  # Default fallback
-            
             # Calculate smart irrigation duration
-            # Note: This will now also publish the water needed to MQTT
-            duration = self.calculate_irrigation_duration(field_id, moisture)
+            duration = self.calculate_irrigation_duration(garden_id, field_id, moisture)
             
-            print(f"[WaterManager] LOW MOISTURE ({moisture}%) - Starting smart irrigation for {field_id}")
+            print(f"[WaterManager] LOW MOISTURE ({moisture}%) - Starting irrigation for {garden_id}/{field_id}")
             
-            # Publish command to valve with calculated duration
-            if field_id in self.actuator_topics:
+            # Find actuator for this garden/field
+            actuator_key = f"{garden_id}_{field_id}"
+            if actuator_key in self.actuator_topics:
                 cmd = {'command': 'OPEN', 'duration': duration}
-                self.client.publish(self.actuator_topics[field_id], json.dumps(cmd))
-                print(f"[WaterManager] Sent OPEN command ({duration}s) to {self.actuator_topics[field_id]}")
+                self.client.publish(self.actuator_topics[actuator_key], json.dumps(cmd))
+                print(f"[WaterManager] Sent OPEN ({duration}s) to {actuator_key}")
+            else:
+                print(f"[WaterManager] No actuator found for {actuator_key}")
         
         elif needs_water and self.rain_alert:
-            print(f"[WaterManager] Low moisture but rain expected - SKIPPING irrigation")
+            print(f"[WaterManager] Low moisture but rain expected - SKIPPING")
         
         elif needs_water and self.frost_alert:
-            print(f"[WaterManager] Low moisture but frost detected - SKIPPING irrigation")
+            print(f"[WaterManager] Low moisture but frost detected - SKIPPING")
         
         else:
-            print(f"[WaterManager] Moisture OK ({moisture}%) - no action needed")
+            print(f"[WaterManager] Moisture OK ({moisture}%)")
 
     def run(self):
         """Subscribe to topics and run forever."""
-        # Subscribe to all sensor topics
-        for topic in self.sensor_topics.keys():
-            self.client.subscribe(topic, qos=0)
+        # Subscribe to all current sensor topics
+        self._subscribe_to_sensors()
         
-        # Subscribe to weather alerts (using config topics, not hardcoded!)
+        # Subscribe to weather alerts
         self.client.subscribe(self.topic_weather_alert, qos=1)
         self.client.subscribe(self.topic_frost_alert, qos=1)
         
         print("[WaterManager] Running... waiting for sensor data")
+        print("[WaterManager] New devices will be auto-discovered")
         
         while True:
             time.sleep(1)

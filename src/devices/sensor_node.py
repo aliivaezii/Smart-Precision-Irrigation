@@ -6,8 +6,8 @@ and temperature readings. It simulates sensor data for
 testing purposes.
 
 The sensor:
-1. Bootstraps from Catalogue (via BaseSensor)
-2. Registers itself via POST (via BaseSensor)
+1. Self-registers with Catalogue (ID assigned dynamically)
+2. Bootstraps broker info from Catalogue
 3. Publishes readings in SenML format
 4. Sends heartbeats to stay registered
 """
@@ -45,11 +45,23 @@ class SensorNode(BaseSensor):
 
 
 if __name__ == '__main__':
+    import sys
     
     catalogue_url = 'http://localhost:8080/'
-    device_id = 'sensor_node_field_1'
     
-    sensor = SensorNode(catalogue_url, device_id)
+    # Default values - can be overridden by command line arguments
+    garden_id = 'garden_1'
+    field_id = 'field_1'
+    
+    # Allow command line: python sensor_node.py garden_1 field_1
+    if len(sys.argv) >= 3:
+        garden_id = sys.argv[1]
+        field_id = sys.argv[2]
+    
+    print(f"Starting sensor for {garden_id}/{field_id}...")
+    
+    # Create sensor - ID is assigned dynamically by Catalogue
+    sensor = SensorNode(catalogue_url, garden_id=garden_id, field_id=field_id)
     
     try:
         sensor.run(interval=10)

@@ -28,71 +28,92 @@ The **Smart Precision Irrigation System** is an IoT-based microservices platform
 - **Resource Tracking**: Monitor water consumption (L) per irrigation cycle
 - **Real-time Monitoring**: Telegram notifications with system status viewing
 - **Cloud Analytics**: ThingSpeak integration for sensor data visualization
-- **Dynamic Registration**: Devices register via REST POST (no hardcoding)
-- **Centralized Status**: Status Service provides unified device state access
+- **Dynamic Registration**: Devices self-register via REST POST and receive auto-assigned IDs
+- **Multi-Garden Support**: Manage multiple gardens with independent fields
+- **Auto-Discovery**: Water Manager automatically discovers new devices
+
+### Multi-Garden Architecture
+
+The system supports **multiple gardens**, each with **multiple fields**. This enables:
+- Independent irrigation control per field
+- Different crop types per field with appropriate water calculations
+- Scalable deployment across large agricultural operations
+
+**Garden/Field Hierarchy**:
+```
+System
+├── garden_1 (Main Garden)
+│   ├── field_1 (tomato, 100m², 20 LPM)
+│   └── field_2 (lettuce, 50m², 15 LPM)
+│
+└── garden_2 (Secondary Garden)
+    └── field_1 (wheat, 200m², 25 LPM)
+```
+
+**Device ID Format**: `{type}_{garden_id}_{field_id}_{counter:03d}`
+- Example: `sensor_garden_1_field_1_001`, `actuator_garden_2_field_1_002`
+
+**Topic Format**: `{topic_prefix}/farm/{garden_id}/{field_id}/{data_type}`
+- Example: `smart_irrigation/farm/garden_1/field_1/soil_moisture`
 
 ---
 
 ## 2. Architecture Diagram
 
-```
-┌─────────────────────────────────────────────────────────────────────────────────┐
-│                              CLOUD LAYER                                        │
-│  ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐              │
-│  │   Open-Meteo    │    │   ThingSpeak    │    │    Telegram     │              │
-│  │   Weather API   │    │   Cloud IoT     │    │    Bot API      │              │
-│  └────────▲────────┘    └────────▲────────┘    └────────▲────────┘              │
-│           │ REST                 │ REST                 │ REST                  │
-└───────────┼──────────────────────┼──────────────────────┼───────────────────────┘
-            │                      │                      │
-┌───────────┼──────────────────────┼──────────────────────┼───────────────────────┐
-│           │              SERVICE LAYER (Gateway)        │                        │
-│  ┌────────┴────────┐    ┌────────┴────────┐    ┌───────┴─────────┐              │
-│  │  Weather Check  │    │ThingSpeak Adaptor│   │   Telegram Bot  │              │
-│  │    Service      │    │     Service      │    │     Service     │              │
-│  └────────┬────────┘    └────────▲────────┘    └────────▲────────┘              │
-│           │ MQTT                 │ MQTT                 │ MQTT + REST           │
-│           ▼                      │                      │                       │
-│  ┌─────────────────────────────────────────────────────────────────────┐        │
-│  │                        MQTT BROKER                                   │        │
-│  │                    (broker.hivemq.com:1883)                          │        │
-│  └───────────────────────────────▲─────────────────────────────────────┘        │
-│                                  │                                              │
-│  ┌────────┬──────────────────────┼──────────────────────┬────────┐              │
-│  │        │ MQTT                 │ MQTT                 │ MQTT   │              │
-│  │        ▼                      ▼                      ▼        │              │
-│  │  ┌───────────┐         ┌───────────────┐      ┌───────────┐   │              │
-│  │  │Water      │◄────────│  Catalogue    │◄─────│  Status   │   │              │
-│  │  │Manager    │  REST   │   Service     │ REST │  Service  │   │              │
-│  │  │(Controller)│        │  (Registry)   │      │  (Cache)  │   │              │
-│  │  └─────┬─────┘         └───────────────┘      └─────▲─────┘   │              │
-│  │        │ MQTT                   ▲                   │ MQTT    │              │
-│  │        ▼                        │ REST              │         │              │
-│  │  ┌───────────┐                  │              ┌────┴────┐    │              │
-│  │  │ Actuator  │◄─────────────────┘              │ Sensor  │    │              │
-│  │  │ (Valve)   │                                 │  Node   │    │              │
-│  │  └───────────┘                                 └─────────┘    │              │
-│  └───────────────────────────────────────────────────────────────┘              │
-└─────────────────────────────────────────────────────────────────────────────────┘
-            │
-┌───────────┴─────────────────────────────────────────────────────────────────────┐
-│                              EDGE LAYER                                         │
-│  ┌─────────────────┐                        ┌─────────────────┐                 │
-│  │  Raspberry Pi   │                        │  Raspberry Pi   │                 │
-│  │   Pico 2 W      │                        │   Pico 2 W      │                 │
-│  │ (Sensor Node)   │                        │ (Actuator Node) │                 │
-│  │                 │                        │                 │                 │
-│  │ • Soil Moisture │                        │ • Solenoid Valve│                 │
-│  │ • Temperature   │                        │   (Gravity-Fed) │                 │
-│  └─────────────────┘                        └─────────────────┘                 │
-│                                                                                 │
-│  ┌─────────────────────────────────────────────────────────────┐                │
-│  │              GRAVITY-FED WATER TANK (Elevated)              │                │
-│  │  • No pump required - water flows by gravity                │                │
-│  │  • Energy-efficient operation                               │                │
-│  └─────────────────────────────────────────────────────────────┘                │
-└─────────────────────────────────────────────────────────────────────────────────┘
-```
+### 2.1 System Architecture
+
+![Smart Precision Irrigation System Architecture](Architecture.jpeg)
+
+### 2.2 Legend
+
+| Symbol | Meaning |
+|--------|---------|
+| **●───** | REST Web Services (Provider) - Component exposes a REST API |
+| **───➝** | REST Web Services (Consumer) - Component calls a REST API |
+| **- - -** (orange dashed) | MQTT Communication |
+| **(1)** | MQTT Publisher |
+| **(2)** | MQTT Subscriber |
+| **(1,2)** | Both MQTT Publisher and Subscriber |
+
+### 2.3 Component Overview
+
+| Component | Type | Role |
+|-----------|------|------|
+| **Device, Service & Resource Catalogue** | REST Provider (●) | Central registry for all devices, services, and configuration |
+| **Water Manager (1,2)** | MQTT Pub/Sub | Control strategy - decides when to irrigate based on sensor data and weather |
+| **Device Connector for RPi - Sensors (1)** | MQTT Publisher | Publishes soil moisture and temperature readings |
+| **Device Connector for RPi - Actuators (2)** | MQTT Subscriber | Receives valve open/close commands |
+| **Status Service (buffer) (2)** | REST Provider + MQTT Sub | Caches device status, provides REST API for queries |
+| **Weather Check (1)** | MQTT Publisher | Publishes rain and frost alerts from Open-Meteo API |
+| **ThingSpeak Adaptor (2)** | MQTT Subscriber | Uploads sensor data to ThingSpeak cloud platform |
+| **Telegram Bot** | REST Consumer | Queries Status Service and Catalogue, sends notifications to users |
+| **Message Broker** | MQTT Broker | HiveMQ public broker (broker.hivemq.com:1883) |
+| **Open-Meteo API** | External REST API | Weather forecast data provider |
+| **ThingSpeak Platform** | External REST API | Cloud IoT analytics platform |
+
+### 2.4 Communication Flow Summary
+
+Based on the architecture diagram, the following connections exist:
+
+| From | To | Protocol | Line Type | Description |
+|------|----|----------|-----------|-------------|
+| Catalogue | All Services | REST | Solid (●) | Bootstrap configuration provider |
+| Sensors | Catalogue | REST | Solid (➝) | Device registration |
+| Actuators | Catalogue | REST | Solid (➝) | Device registration |
+| Water Manager | Catalogue | REST | Solid (➝) | Configuration & device discovery |
+| Status Service | Catalogue | REST | Solid (➝) | Device list for subscriptions |
+| Weather Check | Catalogue | REST | Solid (➝) | Bootstrap configuration |
+| ThingSpeak Adaptor | Catalogue | REST | Solid (➝) | Bootstrap configuration |
+| Telegram Bot | Catalogue | REST | Solid (➝) | Bootstrap configuration |
+| Telegram Bot | Status Service | REST | Solid (➝) | Query device status |
+| Weather Check | Open-Meteo API | REST | Solid (➝) | Weather forecast data |
+| ThingSpeak Adaptor | ThingSpeak Platform | REST | Solid (➝) | Cloud data upload |
+| Sensors (1) | Message Broker | MQTT Pub | Dashed | Soil moisture & temperature |
+| Actuators (2) | Message Broker | MQTT Sub | Dashed | Valve commands |
+| Water Manager (1,2) | Message Broker | MQTT Pub/Sub | Dashed | Commands out, sensor data & alerts in |
+| Status Service (2) | Message Broker | MQTT Sub | Dashed | Cache all device data |
+| Weather Check (1) | Message Broker | MQTT Pub | Dashed | Rain/Frost alerts |
+| ThingSpeak Adaptor (2) | Message Broker | MQTT Sub | Dashed | Sensor data for cloud upload |
 
 ---
 
@@ -237,20 +258,25 @@ BaseDevice (parent class)
 
 #### BaseDevice Class
 
-**Purpose**: Common functionality for all devices (bootstrap, registration, heartbeat, MQTT).
+**Purpose**: Common functionality for all devices (self-registration with dynamic ID, bootstrap, heartbeat, MQTT).
+
+**Key Features**:
+- **Dynamic ID Assignment**: Devices register without an ID; the Catalogue assigns one
+- **Multi-Garden Support**: Devices specify `garden_id` and `field_id`
+- **Topics from Catalogue**: MQTT topics are generated by the Catalogue, not hardcoded
 
 **Key Methods**:
 ```python
 class BaseDevice:
-    def __init__(self, catalogue_url, device_id):
-        # Stores Catalogue URL and device ID
-        # Calls bootstrap() to get configuration
+    def __init__(self, catalogue_url, garden_id='garden_1', field_id='field_1', device_type='sensor'):
+        # Step 1: Self-register with Catalogue (gets assigned ID)
+        # Step 2: Bootstrap - fetch full config from Catalogue
+        # Step 3: Get broker info and field config from gardens
 
-    def bootstrap(self):
-        # REST GET to Catalogue for broker and device config
-
-    def register(self, device_type, publish_topics, subscribe_topics):
-        # REST POST to Catalogue to register the device
+    def _self_register(self):
+        # REST POST to Catalogue WITHOUT ID
+        # Catalogue generates unique ID and returns it with topics
+        # Example response: {"id": "sensor_garden_1_field_1_001", "topics": {...}}
 
     def heartbeat(self):
         # REST POST to Catalogue with device ID (keep-alive)
@@ -262,17 +288,50 @@ class BaseDevice:
         # Stops MQTT client gracefully
 ```
 
-**Registration Payload**:
+**Self-Registration Flow**:
+```
+Device                              Catalogue
+   │                                    │
+   │  POST /devices                     │
+   │  {"type": "sensor",                │
+   │   "garden_id": "garden_1",         │
+   │   "field_id": "field_1"}           │
+   │ ─────────────────────────────────► │
+   │                                    │ Generate ID
+   │                                    │ Generate Topics
+   │  {"status": "registered",          │
+   │   "id": "sensor_garden_1_field_1_001",
+   │   "topics": {"publish": [...], ...}}
+   │ ◄───────────────────────────────── │
+   │                                    │
+```
+
+**Registration Payload (sent by device)**:
 ```json
 {
-    "id": "sensor_node_field_1",
-    "name": "Soil Sensor Field 1",
     "type": "sensor",
-    "topics": {
-        "publish": ["farm/field_1/soil_moisture", "farm/field_1/temperature"],
-        "subscribe": []
-    }
+    "garden_id": "garden_1",
+    "field_id": "field_1",
+    "name": "Sensor garden_1 field_1"
 }
+```
+
+**Registration Response (from Catalogue)**:
+```json
+{
+    "status": "registered",
+    "id": "sensor_garden_1_field_1_001",
+    "topics": {
+        "publish": [
+            "smart_irrigation/farm/garden_1/field_1/soil_moisture",
+            "smart_irrigation/farm/garden_1/field_1/temperature"
+        ],
+        "subscribe": []
+    },
+    "garden_id": "garden_1",
+    "field_id": "field_1"
+}
+```
 ```
 
 #### BaseSensor Class
@@ -282,6 +341,11 @@ class BaseDevice:
 **Key Methods**:
 ```python
 class BaseSensor(BaseDevice):
+    def __init__(self, catalogue_url, garden_id='garden_1', field_id='field_1'):
+        # Calls parent __init__ which self-registers
+        # Gets publish topics from registration response
+        # Starts MQTT client
+
     def sense(self):
         # Abstract method - subclass must implement
         # Returns dict like {"soil_moisture": 45.2, "temperature": 22.5}
@@ -289,9 +353,9 @@ class BaseSensor(BaseDevice):
 
     def publish_reading(self, readings):
         # Creates SenML list from readings dict
-        # Publishes to each topic from device config
+        # Publishes to each topic from Catalogue response
 
-    def run(self, freq=10, heartbeat_interval=6):
+    def run(self, interval=10, heartbeat_interval=6):
         # Main loop: sense → publish → sleep → repeat
         # Sends heartbeat every N cycles
 ```
@@ -303,6 +367,11 @@ class BaseSensor(BaseDevice):
 **Key Methods**:
 ```python
 class BaseActuator(BaseDevice):
+    def __init__(self, catalogue_url, garden_id='garden_1', field_id='field_1'):
+        # Calls parent __init__ which self-registers
+        # Gets subscribe/publish topics from registration response
+        # Starts MQTT client with self as notifier
+
     def notify(self, topic, payload):
         # MQTT callback - receives commands
         # Parses JSON and calls execute_command()
@@ -317,8 +386,8 @@ class BaseActuator(BaseDevice):
         # Publishes to valve_status topic
 
     def run(self, heartbeat_interval=60):
-        # Main loop: just heartbeat
-        # Commands handled via MQTT callback
+        # Subscribes to command topics
+        # Main loop: just heartbeat (commands via MQTT callback)
 ```
 
 ---
@@ -332,7 +401,7 @@ class BaseActuator(BaseDevice):
 **Inheritance**: `SensorNode` → `BaseSensor` → `BaseDevice`
 
 **What SensorNode Implements**:
-Only the `sense()` method - all other logic (bootstrap, register, heartbeat, MQTT, publish) is inherited from base classes.
+Only the `sense()` method - all other logic (self-registration, heartbeat, MQTT, publish) is inherited from base classes.
 
 ```python
 class SensorNode(BaseSensor):
@@ -340,28 +409,39 @@ class SensorNode(BaseSensor):
         # Simulates reading from soil moisture and temperature sensors
         # Returns: {"soil_moisture": 45.2, "temperature": 22.5}
         return {
-            "soil_moisture": random.uniform(30.0, 70.0),
+            "soil_moisture": random.uniform(20.0, 80.0),
             "temperature": random.uniform(15.0, 35.0)
         }
 ```
 
+**Running the Sensor**:
+```bash
+# Start sensor for garden_1/field_1
+python src/devices/sensor_node.py garden_1 field_1
+
+# Start sensor for garden_2/field_1
+python src/devices/sensor_node.py garden_2 field_1
+```
+
 **Why Inheritance Works**:
 - `BaseSensor.run()` calls `self.sense()` which runs `SensorNode.sense()`
-- All registration, heartbeat, and MQTT logic is reused from base classes
-- SensorNode is only ~50 lines instead of ~110 lines
+- ID is assigned by Catalogue at startup (not hardcoded)
+- Topics are received from Catalogue response
+- SensorNode is only ~50 lines instead of ~150 lines
 
 **Data Format (SenML List)**:
 ```json
 [
-    {"bn": "sensor_node_field_1", "n": "soil_moisture", "t": 1703419200.0, "v": 45.2},
-    {"bn": "sensor_node_field_1", "n": "temperature", "t": 1703419200.0, "v": 22.5}
+    {"bn": "sensor_garden_1_field_1_001", "n": "soil_moisture", "t": 1703419200.0, "v": 45.2},
+    {"bn": "sensor_garden_1_field_1_001", "n": "temperature", "t": 1703419200.0, "v": 22.5}
 ]
 ```
 
 **Communication** (inherited from BaseDevice/BaseSensor):
-- **REST GET** → Catalogue (bootstrap)
-- **REST POST** → Catalogue (registration + heartbeat)
-- **MQTT Publish** → `farm/field_X/soil_moisture`, `farm/field_X/temperature`
+- **REST POST** → Catalogue (self-registration, receives ID)
+- **REST GET** → Catalogue (bootstrap config)
+- **REST POST** → Catalogue (heartbeat)
+- **MQTT Publish** → `smart_irrigation/farm/{garden_id}/{field_id}/soil_moisture`
 
 ---
 
@@ -376,7 +456,7 @@ class SensorNode(BaseSensor):
 **System Design**: The system uses gravity-fed irrigation from elevated water tanks. This design eliminates the need for electric pumps, reducing energy consumption and hardware complexity.
 
 **What ActuatorNode Implements**:
-Only the `execute_command()` method and valve-specific logic - all other logic (bootstrap, register, heartbeat, MQTT, notify) is inherited from base classes.
+Only the `execute_command()` method and valve-specific logic - all other logic (self-registration, heartbeat, MQTT, notify) is inherited from base classes.
 
 ```python
 class ActuatorNode(BaseActuator):
@@ -398,44 +478,175 @@ class ActuatorNode(BaseActuator):
         # Publishes water consumption to irrigation/usage topic
 ```
 
+**Running the Actuator**:
+```bash
+# Start actuator for garden_1/field_1
+python src/devices/actuator_node.py garden_1 field_1
+
+# Start actuator for garden_2/field_1
+python src/devices/actuator_node.py garden_2 field_1
+```
+
 **Why Inheritance Works**:
 - `BaseActuator.notify()` parses MQTT message and calls `self.execute_command()`
 - `ActuatorNode.execute_command()` handles the specific valve logic
+- ID is assigned by Catalogue at startup (not hardcoded)
+- Flow rate is read from garden/field configuration
 - ActuatorNode is only ~160 lines instead of ~270 lines
 
-**Key Constants**:
-```python
-FLOW_RATE_LPM = 20.0      # Liters per minute (gravity-fed flow rate)
+**Flow Rate Configuration** (from Catalogue garden/field config):
+```json
+{
+    "gardens": {
+        "garden_1": {
+            "fields": {
+                "field_1": {
+                    "flow_rate_lpm": 20.0
+                }
+            }
+        }
+    }
+}
 ```
 
 **Resource Calculation (on valve close)**:
 ```python
-water_liters = (flow_rate * duration_sec) / 60.0
+water_liters = (flow_rate_lpm * duration_sec) / 60.0
 ```
 
 **Published Data (SenML List)**:
 ```json
 [
-    {"bn": "actuator_valve_1", "n": "water_liters", "t": 1703419200.0, "v": 10.5},
-    {"bn": "actuator_valve_1", "n": "duration_sec", "t": 1703419200.0, "v": 120.0}
+    {"bn": "actuator_garden_1_field_1_001", "n": "water_liters", "t": 1703419200.0, "v": 10.5},
+    {"bn": "actuator_garden_1_field_1_001", "n": "duration_sec", "t": 1703419200.0, "v": 120.0}
 ]
 ```
 
 **Communication** (inherited from BaseDevice/BaseActuator):
-- **REST GET** → Catalogue (bootstrap)
-- **REST POST** → Catalogue (registration + heartbeat)
-- **MQTT Subscribe** → `farm/field_X/valve_cmd`
-- **MQTT Publish** → `farm/field_X/valve_status`, `irrigation/usage`
+- **REST POST** → Catalogue (self-registration, receives ID)
+- **REST GET** → Catalogue (bootstrap config)
+- **REST POST** → Catalogue (heartbeat)
+- **MQTT Subscribe** → `smart_irrigation/farm/{garden_id}/{field_id}/valve_cmd`
+- **MQTT Publish** → `smart_irrigation/farm/{garden_id}/{field_id}/valve_status`, `smart_irrigation/irrigation/usage`
 
 ---
 
-### 5.5 Service Layer
+### 5.5 Device Simulator
+
+#### `src/devices/device_simulator.py`
+
+**Purpose**: Automatically discovers and simulates ALL registered devices from the Catalogue.
+
+**Why This Exists**:
+When you register a device via POST (e.g., from Postman), the Catalogue creates the record and the Water Manager starts subscribing - but no actual data gets published because there's no physical device running. The Device Simulator solves this by:
+1. Auto-registering default devices if none exist
+2. Polling the Catalogue every 60 seconds
+3. Discovering all registered sensors and actuators
+4. Starting simulators for each device automatically
+
+**Key Features**:
+- **Auto-Registration**: If no devices exist, registers default sensor + actuator for garden_1/field_1
+- **Auto-Discovery**: Finds new devices without restart
+- **Parallel Simulation**: Runs multiple sensors/actuators in parallel threads
+- **Simple Code**: Uses basic Python constructs for educational purposes
+
+**Auto-Registration Logic**:
+```python
+def register_default_devices():
+    """Register default devices if none exist."""
+    devices = get_devices()
+    if len(devices) > 0:
+        return  # Devices exist, skip
+    
+    # Register default sensor and actuator
+    default_devices = [
+        {"type": "sensor", "garden_id": "garden_1", "field_id": "field_1"},
+        {"type": "actuator", "garden_id": "garden_1", "field_id": "field_1"},
+    ]
+    for device in default_devices:
+        requests.post(CATALOGUE_URL + "devices", json=device)
+```
+
+**How It Works**:
+```
+Device Simulator                    Catalogue
+       │                               │
+       │  GET /devices                 │
+       │ ─────────────────────────────►│
+       │                               │
+       │  [] (empty list)              │
+       │ ◄─────────────────────────────│
+       │                               │
+       │  POST /devices (sensor)       │
+       │ ─────────────────────────────►│
+       │  POST /devices (actuator)     │
+       │ ─────────────────────────────►│
+       │                               │
+       │  GET /devices                 │
+       │ ─────────────────────────────►│
+       │                               │
+       │  [{"id": "sensor_garden_1_field_1_001", ...}, ...]
+       │ ◄─────────────────────────────│
+       │                               │
+       │  For each device:             │
+       │  - Start SensorSimulator thread
+       │  - Or ActuatorSimulator thread │
+       │                               │
+       │  Wait 60 seconds              │
+       │  Check for new devices...     │
+```
+
+**Classes**:
+```python
+class SensorSimulator:
+    """Simulates a sensor - publishes fake readings every 10 seconds."""
+    def __init__(self, device_id, topics, broker, port)
+    def publish_readings()  # Publishes soil_moisture + temperature
+    def stop()
+
+class ActuatorSimulator:
+    """Simulates an actuator - listens for commands, publishes status."""
+    def __init__(self, device_id, subscribe_topics, publish_topics, broker, port)
+    def notify(topic, payload)  # MQTT callback for commands
+    def open_valve(duration)    # Opens valve, schedules auto-close
+    def close_valve()           # Closes valve, publishes water usage
+    def stop()
+```
+
+**Running the Device Simulator**:
+```bash
+python src/devices/device_simulator.py
+```
+
+**Integration with Launcher Scripts**:
+The `start.py` launcher script starts the Device Simulator by default:
+```bash
+python scripts/macos/start.py              # Starts all services + Device Simulator
+python scripts/macos/start.py --no-devices # Services only, no Device Simulator
+```
+
+**Published Data (SenML format)**:
+```json
+[
+    {"bn": "sensor_garden_1_field_1_001", "n": "soil_moisture", "t": 1703419200.0, "v": 45.2},
+    {"bn": "sensor_garden_1_field_1_001", "n": "temperature", "t": 1703419200.0, "v": 22.5}
+]
+```
+
+---
+
+### 5.6 Service Layer
 
 #### `src/services/catalogue/service.py`
 
 **Purpose**: Central service registry and configuration provider (Service Catalogue pattern).
 
 **Technology**: CherryPy REST framework
+
+**Key Features**:
+- **Multi-Garden Support**: Manages multiple gardens with their own fields
+- **Dynamic ID Generation**: Automatically assigns unique IDs to new devices
+- **Topic Generation**: Creates MQTT topics based on project_info.topic_prefix
 
 **Endpoints**:
 
@@ -447,27 +658,112 @@ water_liters = (flow_rate * duration_sec) / 60.0
 | GET | `/devices/{id}` | Specific device by ID |
 | GET | `/settings` | System settings (thresholds, location) |
 | GET | `/services` | List of registered services |
-| **POST** | `/devices` | Register new device or heartbeat |
+| GET | `/gardens` | List all gardens with their fields |
+| GET | `/gardens/{garden_id}` | Specific garden config |
+| **POST** | `/devices` | Register new device (auto-assigns ID) |
+| **POST** | `/gardens` | Add a new garden |
 | **PUT** | `/devices/{id}` | Update existing device |
 | **DELETE** | `/devices/{id}` | Remove device |
 
+**Dynamic ID Generation**:
+```python
+def generate_device_id(device_type, garden_id, field_id):
+    # Format: {type}_{garden_id}_{field_id}_{counter:03d}
+    # Example: "sensor_garden_1_field_1_001"
+    
+    counter_key = f"{device_type}_{garden_id}_{field_id}"
+    counters = config.get('device_counters', {})
+    count = counters.get(counter_key, 0) + 1
+    return f"{device_type}_{garden_id}_{field_id}_{count:03d}"
+```
+
 **Dynamic Registration (POST /devices)**:
 ```python
-# Request body:
+# Request body (ID is NOT required - auto-generated):
 {
-    "id": "actuator_valve_1",
-    "name": "Field 1 Valve",
-    "type": "actuator",
-    "topics": {
-        "subscribe": ["smart_irrigation/farm/field_1/valve_cmd"],
-        "publish": ["smart_irrigation/farm/field_1/valve_status"]
-    }
+    "type": "sensor",
+    "garden_id": "garden_1",
+    "field_id": "field_1",
+    "name": "Sensor garden_1 field_1"
 }
 
-# Response:
-{"status": "registered", "id": "actuator_valve_1"}
-# or if exists:
-{"status": "heartbeat", "id": "actuator_valve_1"}
+# Response (ID and topics generated by Catalogue):
+{
+    "status": "registered",
+    "id": "sensor_garden_1_field_1_001",
+    "topics": {
+        "publish": [
+            "smart_irrigation/farm/garden_1/field_1/soil_moisture",
+            "smart_irrigation/farm/garden_1/field_1/temperature"
+        ],
+        "subscribe": []
+    },
+    "garden_id": "garden_1",
+    "field_id": "field_1"
+}
+```
+
+**Topic Generation** (from project_info.topic_prefix):
+```python
+topic_prefix = config['project_info']['topic_prefix']  # "smart_irrigation"
+
+# For sensors:
+topics = {
+    "publish": [
+        f"{topic_prefix}/farm/{garden_id}/{field_id}/soil_moisture",
+        f"{topic_prefix}/farm/{garden_id}/{field_id}/temperature"
+    ],
+    "subscribe": []
+}
+
+# For actuators:
+topics = {
+    "publish": [
+        f"{topic_prefix}/farm/{garden_id}/{field_id}/valve_status",
+        f"{topic_prefix}/irrigation/usage"
+    ],
+    "subscribe": [
+        f"{topic_prefix}/farm/{garden_id}/{field_id}/valve_cmd"
+    ]
+}
+```
+
+> **⚠️ Important**: POST registration only creates the device configuration in the Catalogue. To actually run the device (publish sensor data or respond to commands), you must start a Python process:
+> ```bash
+> # After POST registration for garden_1/field_3:
+> python src/devices/sensor_node.py garden_1 field_3
+> python src/devices/actuator_node.py garden_1 field_3
+> ```
+> In a real deployment, each device is a physical microcontroller. The Python scripts simulate these devices.
+
+**Multi-Garden Structure** (in system_config.json):
+```json
+{
+    "gardens": {
+        "garden_1": {
+            "name": "Main Garden",
+            "location": "North Section",
+            "fields": {
+                "field_1": {
+                    "crop_type": "tomato",
+                    "field_size_m2": 100.0,
+                    "flow_rate_lpm": 20.0
+                }
+            }
+        },
+        "garden_2": {
+            "name": "Secondary Garden",
+            "fields": {
+                "field_1": {
+                    "crop_type": "lettuce",
+                    "field_size_m2": 50.0,
+                    "flow_rate_lpm": 15.0
+                }
+            }
+        }
+    },
+    "device_counters": {}
+}
 ```
 
 **Configuration Source**: Reads from `config/system_config.json`
@@ -480,12 +776,41 @@ water_liters = (flow_rate * duration_sec) / 60.0
 
 **Purpose**: Core irrigation controller — the "brain" of the system with smart irrigation logic.
 
+**Key Features**:
+- **Auto-Discovery**: Automatically discovers new devices from Catalogue
+- **Multi-Garden Support**: Manages irrigation across multiple gardens/fields
+- **Dynamic Subscriptions**: Subscribes to new sensors as they register
+
 **Responsibilities**:
-1. Subscribe to all sensor data topics
-2. Evaluate soil moisture against threshold
-3. Check for active rain AND frost alerts
-4. Calculate irrigation duration based on crop type and field size
-5. Publish valve open/close commands with calculated duration
+1. Poll Catalogue for registered devices (every 60 seconds)
+2. Auto-subscribe to all sensor data topics
+3. Evaluate soil moisture against threshold
+4. Check for active rain AND frost alerts
+5. Calculate irrigation duration based on crop type and field size
+6. Publish valve open/close commands with calculated duration
+
+**Auto-Discovery Logic**:
+```python
+def _refresh_devices(self):
+    """Polls Catalogue every 60 seconds for new devices"""
+    while self.running:
+        try:
+            response = requests.get(f"{self.catalogue_url}/devices")
+            new_devices = response.json()
+            
+            # Find newly registered sensors
+            new_sensor_ids = set(d['id'] for d in new_devices if d['type'] == 'sensor')
+            current_sensor_ids = set(d['id'] for d in self.devices if d['type'] == 'sensor')
+            
+            if new_sensor_ids != current_sensor_ids:
+                self.devices = new_devices
+                self._subscribe_to_sensors()  # Subscribe to new topics
+                
+        except Exception as e:
+            print(f"Device refresh error: {e}")
+        
+        time.sleep(60)  # Check every 60 seconds
+```
 
 **Smart Irrigation Logic**:
 ```python
@@ -523,9 +848,9 @@ for measurement in data:
 ```
 
 **Communication**:
-- **REST** → Catalogue (bootstrap + field config)
-- **MQTT Subscribe** → `farm/field_X/soil_moisture`, `weather/alert`, `weather/frost`
-- **MQTT Publish** → `farm/field_X/valve_cmd`
+- **REST GET** → Catalogue (bootstrap + gardens config + devices)
+- **MQTT Subscribe** → `smart_irrigation/farm/{garden_id}/{field_id}/soil_moisture`, `smart_irrigation/weather/alert`, `smart_irrigation/weather/frost`
+- **MQTT Publish** → `smart_irrigation/farm/{garden_id}/{field_id}/valve_cmd`
 
 **Command Format**:
 ```json
@@ -642,7 +967,7 @@ def show_system_status(self, chat_id):
 
 ---
 
-#### `src/services/status_service/service.py`
+#### `src/services/status/service.py`
 
 **Purpose**: Centralized device status cache with REST API. Subscribes to all device topics and provides unified access to current device states.
 
@@ -697,10 +1022,21 @@ def show_system_status(self, chat_id):
 **Target Platform**: ThingSpeak (https://thingspeak.com)
 
 **Features**:
-- Subscribes to Field 1 sensor topics
+- Uses **wildcard MQTT subscription** to catch all field_1 data
+- Works even when devices register AFTER the adaptor starts
 - Parses SenML list format
 - Buffers incoming data
 - Rate-limited uploads (ThingSpeak requires 15s between updates)
+
+**Wildcard Subscription**: Instead of subscribing to specific device topics (which requires knowing device IDs at startup), the adaptor uses a wildcard topic:
+```python
+# Subscribes to ALL messages under garden_1/field_1
+self.wildcard_topic = "smart_irrigation/farm/garden_1/field_1/#"
+```
+
+This ensures data is received even when:
+- Devices are registered via POST after the adaptor starts
+- New sensors are added dynamically during operation
 
 **Field Scope**: The adaptor focuses on Field 1 data to work within ThingSpeak's free tier limitations (8 fields per channel).
 
@@ -728,42 +1064,109 @@ if isinstance(data, list):
 **Communication**:
 - **REST** → Catalogue (bootstrap)
 - **REST** → ThingSpeak API (data upload)
-- **MQTT Subscribe** → `farm/field_1/soil_moisture`, `farm/field_1/temperature`, `irrigation/usage`
+- **MQTT Subscribe** → `smart_irrigation/farm/garden_1/field_1/#` (wildcard), `smart_irrigation/irrigation/usage`
 
 ---
 
 ## 6. Service Roles (Provider/Consumer)
 
-### Service Provider vs Consumer Matrix
+This section documents the communication roles of each component based on the architecture diagram.
 
-| Component | REST Provider | REST Consumer | MQTT Publisher | MQTT Subscriber |
-|-----------|:-------------:|:-------------:|:--------------:|:---------------:|
-| **Catalogue Service** | ✅ | ❌ | ❌ | ❌ |
-| **Status Service** | ✅ | ✅ | ❌ | ✅ |
-| **Sensor Node** | ❌ | ✅ | ✅ | ❌ |
-| **Actuator Node** | ❌ | ✅ (POST) | ✅ | ✅ |
-| **Water Manager** | ❌ | ✅ | ✅ | ✅ |
-| **Weather Check** | ❌ | ✅ | ✅ | ❌ |
-| **Telegram Bot** | ❌ | ✅ | ❌ | ✅ |
-| **ThingSpeak Adaptor** | ❌ | ✅ | ❌ | ✅ |
+### 6.1 Legend
 
-### Detailed Role Analysis
+| Symbol | Meaning |
+|--------|---------|
+| **●** | REST Web Services (Provider) - Exposes REST API |
+| **➝** | REST Web Services (Consumer) - Calls REST API |
+| **(1)** | MQTT Publisher - Publishes messages to broker |
+| **(2)** | MQTT Subscriber - Subscribes to messages from broker |
+| **- - -** | MQTT Communication (dashed line in diagram) |
+| **───** | REST Communication (solid line in diagram) |
 
-#### Pure Service Providers:
-- **Catalogue Service**: Provides configuration data and device registration via REST API
+### 6.2 Service Provider vs Consumer Matrix
 
-#### REST and MQTT Providers:
-- **Status Service**: Provides cached device status via REST, subscribes to all device topics via MQTT
+| Component | REST Provider ● | REST Consumer ➝ | MQTT Pub (1) | MQTT Sub (2) |
+|-----------|:---------------:|:---------------:|:------------:|:------------:|
+| **Catalogue** | ✅ | ❌ | ❌ | ❌ |
+| **Water Manager** | ❌ | ✅ | ✅ (1,2) | ✅ (1,2) |
+| **Sensors (RPi)** | ❌ | ✅ | ✅ (1) | ❌ |
+| **Actuators (RPi)** | ❌ | ✅ | ❌ | ✅ (2) |
+| **Status Service** | ✅ | ✅ | ❌ | ✅ (2) |
+| **Weather Check** | ❌ | ✅ | ✅ (1) | ❌ |
+| **ThingSpeak Adaptor** | ❌ | ✅ | ❌ | ✅ (2) |
+| **Telegram Bot** | ❌ | ✅ | ❌ | ❌ |
 
-#### Pure Service Consumers:
-- **ThingSpeak Adaptor**: Only consumes data (MQTT) and forwards to cloud
+> **Note on Telegram Bot**: According to the architecture diagram, Telegram Bot uses **REST only** to communicate with:
+> - Catalogue (bootstrap configuration)
+> - Status Service (device status retrieval)
+> 
+> However, the **actual implementation** also subscribes to MQTT weather/frost alert topics for real-time notifications. This is an enhancement beyond the diagram design.
 
-#### Hybrid (Provider & Consumer):
-- **Water Manager**: Consumes sensor data, provides valve commands
-- **Weather Check**: Consumes external API, provides alerts (rain + frost)
-- **Sensor Node**: Consumes config, provides sensor readings
-- **Actuator Node**: Consumes commands, provides status + resource usage
-- **Telegram Bot**: Consumes alerts (MQTT) + device status (REST from Status Service), provides user notifications
+> **Note on Actuators**: In the diagram, actuators only subscribe (2). In the **actual implementation**, actuators also publish valve_status and resource_usage data. This is documented in Section 5.4.
+
+### 6.3 Detailed Role Analysis
+
+#### Pure REST Providers:
+- **Catalogue Service**: Central registry providing configuration data and device registration via REST API. All other services bootstrap from this.
+
+#### REST Provider + MQTT Subscriber:
+- **Status Service (buffer)**: Provides cached device status via REST (port 9090), subscribes to all device topics via MQTT to maintain the cache.
+
+#### MQTT Publisher Only:
+- **Sensors (RPi)**: Publish sensor readings (soil_moisture, temperature) via MQTT. Consume REST only for registration.
+- **Weather Check**: Publishes weather alerts (rain/frost) via MQTT. Consumes REST from Catalogue and Open-Meteo API.
+
+#### MQTT Subscriber Only:
+- **Actuators (RPi)**: Subscribe to valve commands via MQTT. Consume REST for registration. (Also publish status in actual implementation)
+- **ThingSpeak Adaptor**: Subscribes to sensor data via MQTT, uploads to ThingSpeak cloud via REST.
+
+#### Hybrid (Publisher & Subscriber):
+- **Water Manager (1,2)**: The "brain" of the system with Control Strategy. Subscribes to sensor data and weather alerts, publishes valve commands.
+
+### 6.4 Control Strategy
+
+As shown in the diagram, the **Control Strategy** is integrated within the **Water Manager** service. It:
+1. Receives sensor data (MQTT subscriber)
+2. Receives weather alerts (MQTT subscriber)
+3. Makes irrigation decisions based on:
+   - Soil moisture vs threshold
+   - Weather conditions (rain/frost)
+   - Crop type and field configuration
+4. Sends valve commands (MQTT publisher)
+
+### 6.5 Design vs Implementation Analysis
+
+The following table documents differences between the **architecture diagram** and the **actual implementation**:
+
+| Component | Diagram Design | Actual Implementation | Status | Action Needed |
+|-----------|----------------|----------------------|--------|---------------|
+| **Telegram Bot** | REST only (no MQTT) | Subscribes to MQTT alerts (weather/frost) | ⚡ Enhanced | None - improves UX |
+| **Actuators** | MQTT Subscriber only (2) | Also publishes valve_status and water_liters | ⚡ Enhanced | Update diagram to show (1,2) |
+| **Status Service** | REST Provider (●) + MQTT Sub (2) | Same as diagram | ✅ Match | None |
+| **Weather Check** | MQTT Publisher (1) + REST Consumer | Same as diagram | ✅ Match | None |
+| **ThingSpeak Adaptor** | MQTT Subscriber (2) | Same as diagram | ✅ Match | None |
+| **Water Manager** | MQTT Pub/Sub (1,2) + Control Strategy | Same as diagram | ✅ Match | None |
+| **Sensors** | MQTT Publisher (1) | Same as diagram | ✅ Match | None |
+| **Catalogue** | REST Provider (●) only | Same as diagram | ✅ Match | None |
+
+**Legend:**
+- ✅ Match = Implementation matches diagram design
+- ⚡ Enhanced = Implementation adds features beyond diagram (acceptable)
+- ❌ Gap = Missing feature that should be implemented
+
+**Analysis:**
+
+1. **Telegram Bot MQTT Subscription (Enhancement)**: 
+   - **Diagram**: Shows REST-only connections to Catalogue and Status Service
+   - **Code**: Also subscribes to `weather/alert` and `weather/frost` MQTT topics
+   - **Rationale**: Enables **real-time push notifications** instead of polling. This is a valuable enhancement that improves user experience.
+   - **Recommendation**: Either update the diagram to show MQTT connection, OR keep it as-is since it's an internal optimization.
+
+2. **Actuator MQTT Publishing (Enhancement)**:
+   - **Diagram**: Shows only (2) = Subscriber
+   - **Code**: Also publishes `valve_status` and `water_liters` (resource usage)
+   - **Rationale**: Enables monitoring of valve state and water consumption tracking
+   - **Recommendation**: Update diagram to show Actuators as (1,2) if this is a core feature
 
 ---
 
@@ -1020,40 +1423,40 @@ Open-Meteo API           Weather Check           Water Manager          Telegram
             "water_needed": "field4"
         }
     },
-    "fields": {
-        "field_1": {
-            "crop_type": "tomato",
-            "field_size_m2": 100,
-            "water_need_mm_per_day": 5.0,
-            "flow_rate_lpm": 20.0
+    "gardens": {
+        "garden_1": {
+            "name": "Main Garden",
+            "location": "North Section",
+            "fields": {
+                "field_1": {
+                    "crop_type": "tomato",
+                    "field_size_m2": 100.0,
+                    "water_need_mm_per_day": 5.0,
+                    "flow_rate_lpm": 20.0
+                },
+                "field_2": {
+                    "crop_type": "lettuce",
+                    "field_size_m2": 50.0,
+                    "water_need_mm_per_day": 4.0,
+                    "flow_rate_lpm": 15.0
+                }
+            }
         },
-        "field_2": {
-            "crop_type": "wheat",
-            "field_size_m2": 200,
-            "water_need_mm_per_day": 3.0,
-            "flow_rate_lpm": 20.0
+        "garden_2": {
+            "name": "Secondary Garden",
+            "location": "South Section",
+            "fields": {
+                "field_1": {
+                    "crop_type": "wheat",
+                    "field_size_m2": 200.0,
+                    "water_need_mm_per_day": 3.0,
+                    "flow_rate_lpm": 25.0
+                }
+            }
         }
     },
-    "devices": [
-        {
-            "id": "sensor_node_field_1",
-            "name": "Field 1 Soil Moisture Sensor",
-            "type": "sensor",
-            "topics": {
-                "publish": ["smart_irrigation/farm/field_1/soil_moisture", "smart_irrigation/farm/field_1/temperature"],
-                "subscribe": ["smart_irrigation/farm/field_1/config"]
-            }
-        },
-        {
-            "id": "actuator_valve_1",
-            "name": "Field 1 Irrigation Valve",
-            "type": "actuator",
-            "topics": {
-                "publish": ["smart_irrigation/farm/field_1/valve_status"],
-                "subscribe": ["smart_irrigation/farm/field_1/valve_cmd"]
-            }
-        }
-    ]
+    "device_counters": {},
+    "devices": []
 }
 ```
 
@@ -1061,6 +1464,7 @@ Open-Meteo API           Weather Check           Water Manager          Telegram
 
 | Parameter | Description | Default |
 |-----------|-------------|---------|
+| `project_info.topic_prefix` | Base prefix for all MQTT topics | smart_irrigation |
 | `broker.address` | MQTT broker hostname | broker.hivemq.com |
 | `broker.port` | MQTT broker port | 1883 |
 | `broker.port_tls` | MQTT TLS port | 8883 |
@@ -1068,9 +1472,42 @@ Open-Meteo API           Weather Check           Water Manager          Telegram
 | `settings.rain_threshold_mm` | Rain alert trigger (mm) | 5.0 |
 | `settings.frost_threshold_c` | Frost alert trigger (°C) | 2.0 |
 | `settings.lat`, `settings.lon` | Location for weather API | 45.06, 7.66 |
-| `fields.*.crop_type` | Crop type for smart irrigation | tomato, wheat, etc. |
-| `fields.*.field_size_m2` | Field size in square meters | 100 |
-| `fields.*.flow_rate_lpm` | Water flow rate (L/min) | 20.0 |
+| `gardens.*.name` | Human-readable garden name | "Main Garden" |
+| `gardens.*.fields.*.crop_type` | Crop type for smart irrigation | tomato, wheat, etc. |
+| `gardens.*.fields.*.field_size_m2` | Field size in square meters | 100 |
+| `gardens.*.fields.*.flow_rate_lpm` | Water flow rate (L/min) | 20.0 |
+| `device_counters` | Auto-generated counters for device IDs | {} (managed by Catalogue) |
+| `devices` | List of registered devices | [] (populated at runtime) |
+
+### 10.3 Multi-Garden Structure
+
+The `gardens` object provides a hierarchical structure for managing multiple gardens:
+
+```
+gardens
+├── garden_1
+│   ├── name: "Main Garden"
+│   ├── location: "North Section"
+│   └── fields
+│       ├── field_1 (tomato, 100m², 20 LPM)
+│       └── field_2 (lettuce, 50m², 15 LPM)
+│
+└── garden_2
+    ├── name: "Secondary Garden"
+    ├── location: "South Section"
+    └── fields
+        └── field_1 (wheat, 200m², 25 LPM)
+```
+
+**Device ID Assignment**:
+- IDs are auto-generated when devices register via POST
+- Format: `{type}_{garden_id}_{field_id}_{counter:03d}`
+- Example: `sensor_garden_1_field_1_001`, `actuator_garden_2_field_1_001`
+
+**Topic Generation**:
+- Topics are auto-generated using `project_info.topic_prefix`
+- Format: `{topic_prefix}/farm/{garden_id}/{field_id}/{data_type}`
+- Example: `smart_irrigation/farm/garden_1/field_1/soil_moisture`
 
 ---
 
@@ -1078,44 +1515,57 @@ Open-Meteo API           Weather Check           Water Manager          Telegram
 
 ### 11.1 Topic Hierarchy
 
+Topics are dynamically generated using `project_info.topic_prefix` from configuration.
+
 ```
-farm/
-├── field_1/
-│   ├── soil_moisture    # Sensor data (SenML list)
-│   ├── temperature      # Sensor data (SenML list)
-│   ├── valve_cmd        # Commands to actuator
-│   ├── valve_status     # Actuator feedback (SenML list)
-│   └── config           # Configuration updates
-├── field_2/
+{topic_prefix}/
+├── farm/
+│   ├── {garden_id}/
+│   │   ├── {field_id}/
+│   │   │   ├── soil_moisture    # Sensor data (SenML list)
+│   │   │   ├── temperature      # Sensor data (SenML list)
+│   │   │   ├── valve_cmd        # Commands to actuator
+│   │   │   ├── valve_status     # Actuator feedback (SenML list)
+│   │   │   └── config           # Configuration updates
+│   │   └── ...
 │   └── ...
 │
-weather/
-├── alert                # Rain alerts
-└── frost                # Frost alerts
+├── weather/
+│   ├── alert                    # Rain alerts
+│   └── frost                    # Frost alerts
 │
-irrigation/
-└── usage                # Resource usage (water consumption)
+└── irrigation/
+    └── usage                    # Resource usage (water consumption)
+```
+
+**Example Topics** (with `topic_prefix: "smart_irrigation"`):
+```
+smart_irrigation/farm/garden_1/field_1/soil_moisture
+smart_irrigation/farm/garden_1/field_1/valve_cmd
+smart_irrigation/farm/garden_2/field_1/valve_status
+smart_irrigation/weather/alert
+smart_irrigation/irrigation/usage
 ```
 
 ### 11.2 Topic Definitions
 
-| Topic | Publisher | Subscriber | Payload Format | QoS |
+| Topic Pattern | Publisher | Subscriber | Payload Format | QoS |
 |-------|-----------|------------|----------------|-----|
-| `farm/field_X/soil_moisture` | Sensor Node | Water Manager, Status Service, ThingSpeak | SenML list | 0 |
-| `farm/field_X/temperature` | Sensor Node | Status Service, ThingSpeak | SenML list | 0 |
-| `farm/field_X/valve_cmd` | Water Manager | Actuator | Command JSON | 0 |
-| `farm/field_X/valve_status` | Actuator | Status Service | SenML list | 0 |
-| `weather/alert` | Weather Check | Water Manager, Telegram | Alert JSON | 1 |
-| `weather/frost` | Weather Check | Water Manager, Telegram | Alert JSON | 1 |
-| `irrigation/usage` | Actuator | Status Service, ThingSpeak | SenML list | 0 |
+| `{prefix}/farm/{garden}/{field}/soil_moisture` | Sensor Node | Water Manager, Status Service, ThingSpeak | SenML list | 0 |
+| `{prefix}/farm/{garden}/{field}/temperature` | Sensor Node | Status Service, ThingSpeak | SenML list | 0 |
+| `{prefix}/farm/{garden}/{field}/valve_cmd` | Water Manager | Actuator | Command JSON | 0 |
+| `{prefix}/farm/{garden}/{field}/valve_status` | Actuator | Status Service | SenML list | 0 |
+| `{prefix}/weather/alert` | Weather Check | Water Manager, Telegram | Alert JSON | 1 |
+| `{prefix}/weather/frost` | Weather Check | Water Manager, Telegram | Alert JSON | 1 |
+| `{prefix}/irrigation/usage` | Actuator | Status Service, ThingSpeak | SenML list | 0 |
 
 ### 11.3 Message Formats
 
 **Sensor Data (SenML List)**:
 ```json
 [
-    {"bn": "sensor_node_field_1", "n": "soil_moisture", "t": 1703419200.0, "v": 25.5},
-    {"bn": "sensor_node_field_1", "n": "temperature", "t": 1703419200.0, "v": 22.1}
+    {"bn": "sensor_garden_1_field_1_001", "n": "soil_moisture", "t": 1703419200.0, "v": 25.5},
+    {"bn": "sensor_garden_1_field_1_001", "n": "temperature", "t": 1703419200.0, "v": 22.1}
 ]
 ```
 
@@ -1137,8 +1587,8 @@ irrigation/
 **Resource Usage (SenML List)**:
 ```json
 [
-    {"bn": "actuator_valve_1", "n": "water_liters", "t": 1703419200.0, "v": 10.5},
-    {"bn": "actuator_valve_1", "n": "duration_sec", "t": 1703419200.0, "v": 120.0}
+    {"bn": "actuator_garden_1_field_1_001", "n": "water_liters", "t": 1703419200.0, "v": 10.5},
+    {"bn": "actuator_garden_1_field_1_001", "n": "duration_sec", "t": 1703419200.0, "v": 120.0}
 ]
 ```
 
@@ -1160,9 +1610,10 @@ Returns the complete system configuration.
     "broker": {...},
     "topics": {...},
     "settings": {...},
-    "fields": {...},
+    "gardens": {...},
     "telegram": {...},
     "thingspeak": {...},
+    "device_counters": {...},
     "devices": [...]
 }
 ```
@@ -1181,6 +1632,61 @@ Returns MQTT broker connection details.
 }
 ```
 
+#### GET /gardens
+Returns all gardens with their fields.
+
+**Response**:
+```json
+{
+    "garden_1": {
+        "name": "Main Garden",
+        "location": "North Section",
+        "fields": {
+            "field_1": {
+                "crop_type": "tomato",
+                "field_size_m2": 100.0,
+                "flow_rate_lpm": 20.0
+            }
+        }
+    },
+    "garden_2": {...}
+}
+```
+
+#### GET /gardens/{garden_id}
+Returns a specific garden configuration.
+
+**Response**:
+```json
+{
+    "name": "Main Garden",
+    "location": "North Section",
+    "fields": {
+        "field_1": {...},
+        "field_2": {...}
+    }
+}
+```
+
+#### POST /gardens
+Add a new garden.
+
+**Request Body**:
+```json
+{
+    "garden_id": "garden_3",
+    "name": "New Garden",
+    "location": "East Section",
+    "fields": {
+        "field_1": {
+            "crop_type": "corn",
+            "field_size_m2": 150.0,
+            "flow_rate_lpm": 18.0
+        }
+    }
+}
+```
+
 #### GET /devices
 Returns list of registered devices.
 
@@ -1188,9 +1694,11 @@ Returns list of registered devices.
 ```json
 [
     {
-        "id": "sensor_node_field_1",
-        "name": "Field 1 Soil Moisture Sensor",
+        "id": "sensor_garden_1_field_1_001",
+        "name": "Sensor garden_1 field_1",
         "type": "sensor",
+        "garden_id": "garden_1",
+        "field_id": "field_1",
         "topics": {...}
     }
 ]
@@ -1202,32 +1710,43 @@ Returns a specific device by ID.
 **Response**:
 ```json
 {
-    "id": "actuator_valve_1",
-    "name": "Field 1 Irrigation Valve",
+    "id": "actuator_garden_1_field_1_001",
+    "name": "Actuator garden_1 field_1",
     "type": "actuator",
+    "garden_id": "garden_1",
+    "field_id": "field_1",
     "topics": {...}
 }
 ```
 
 #### POST /devices
-Register a new device or send heartbeat.
+Register a new device (ID auto-generated).
 
-**Request Body**:
+**Request Body** (ID NOT required):
 ```json
 {
-    "id": "actuator_valve_1",
-    "name": "Field 1 Valve",
-    "type": "actuator",
-    "topics": {
-        "subscribe": ["smart_irrigation/farm/field_1/valve_cmd"],
-        "publish": ["smart_irrigation/farm/field_1/valve_status"]
-    }
+    "type": "sensor",
+    "garden_id": "garden_1",
+    "field_id": "field_1",
+    "name": "Sensor garden_1 field_1"
 }
 ```
 
-**Response**:
+**Response** (ID and topics auto-generated):
 ```json
-{"status": "registered", "id": "actuator_valve_1"}
+{
+    "status": "registered",
+    "id": "sensor_garden_1_field_1_001",
+    "topics": {
+        "publish": [
+            "smart_irrigation/farm/garden_1/field_1/soil_moisture",
+            "smart_irrigation/farm/garden_1/field_1/temperature"
+        ],
+        "subscribe": []
+    },
+    "garden_id": "garden_1",
+    "field_id": "field_1"
+}
 ```
 
 #### PUT /devices/{id}
@@ -1286,25 +1805,39 @@ Returns field configurations for smart irrigation.
 
 **Base URL**: `http://localhost:9090`
 
+**Key Feature**: **Smart Payload Merging** - When multiple measurements from the same device arrive (e.g., soil_moisture and temperature from the same sensor), the Status Service merges them into a single payload instead of overwriting. This ensures the Telegram Bot can display all measurements for a device.
+
 #### GET /
 Returns all cached device statuses.
 
-**Response**:
+**Response** (with merged payloads):
 ```json
 {
-    "sensor_node_field_1": {
-        "topic": "smart_irrigation/farm/field_1/soil_moisture",
+    "sensor_garden_1_field_1_001": {
+        "topic": "smart_irrigation/farm/garden_1/field_1/temperature",
         "timestamp": 1703419200.0,
         "received_at": "2026-01-06 10:00:00",
-        "payload": [{"bn": "sensor_node_field_1", "n": "soil_moisture", "v": 45.2}]
+        "payload": [
+            {"bn": "sensor_garden_1_field_1_001", "n": "soil_moisture", "t": 1703419200.0, "v": 45.2},
+            {"bn": "sensor_garden_1_field_1_001", "n": "temperature", "t": 1703419200.0, "v": 22.5}
+        ]
     },
-    "actuator_valve_1": {
-        "topic": "smart_irrigation/farm/field_1/valve_status",
+    "actuator_garden_1_field_1_001": {
+        "topic": "smart_irrigation/farm/garden_1/field_1/valve_status",
         "timestamp": 1703419210.0,
         "received_at": "2026-01-06 10:00:10",
-        "payload": [{"bn": "actuator_valve_1", "n": "valve_state", "v": "OPEN"}]
+        "payload": [{"bn": "actuator_garden_1_field_1_001", "n": "valve_status", "vs": "OPEN"}]
     }
 }
+```
+
+**Payload Merging Logic**:
+```python
+# When new measurement arrives for existing device:
+# 1. Get existing payload (if any)
+# 2. Create dict of measurements by name
+# 3. Update with new measurement (overwrites same name)
+# 4. Convert back to list
 ```
 
 ### 12.3 External APIs Used
@@ -1346,16 +1879,74 @@ Returns all cached device statuses.
 
 ## 15. Running the System
 
-### Startup Order
+### Automated Launcher Scripts
+
+The system includes Python launcher scripts located in the `scripts/` directory that automatically open each service in a separate terminal window.
+
+```
+scripts/
+├── README.md           # Launcher documentation
+├── macos/
+│   ├── start.py        # Start all services (macOS)
+│   └── stop.py         # Stop all services (macOS)
+└── windows/
+    ├── start.py        # Start all services (Windows)
+    └── stop.py         # Stop all services (Windows)
+```
+
+#### macOS
+
+```bash
+# Start all services and devices
+python scripts/macos/start.py
+
+# Start services only (no sensors/actuators)
+python scripts/macos/start.py --no-devices
+
+# Stop all services
+python scripts/macos/stop.py
+python scripts/macos/stop.py --force  # Without confirmation
+```
+
+#### Windows
+
+```bash
+# Start all services and devices (Command Prompt)
+python scripts\windows\start.py
+
+# Start services only
+python scripts\windows\start.py --no-devices
+
+# Use PowerShell instead of Command Prompt
+python scripts\windows\start.py --powershell
+
+# Stop all services
+python scripts\windows\stop.py
+python scripts\windows\stop.py --force  # Without confirmation
+```
+
+#### Launcher Script Features
+
+| Feature | Description |
+|---------|-------------|
+| Auto-detect Python | Finds virtual environment or system Python |
+| Ordered Startup | Services start in correct dependency order |
+| Startup Delays | Waits between services for proper initialization |
+| Named Windows | Each terminal window has a descriptive title |
+| Service URLs | Displays useful URLs after startup |
+
+### Manual Startup Order
+
+If you prefer to start services manually:
 
 1. **Catalogue Service** (must start first)
    ```bash
    python src/services/catalogue/service.py
    ```
 
-2. **Status Service** (must start before Telegram Bot)
+2. **Status Service**
    ```bash
-   python src/services/status_service/service.py
+   python src/services/status/service.py
    ```
 
 3. **Weather Check Service**
@@ -1378,14 +1969,14 @@ Returns all cached device statuses.
    python src/services/thingspeak_adaptor/service.py
    ```
 
-7. **Sensor Nodes**
+7. **Sensor Nodes** (specify garden_id and field_id)
    ```bash
-   python src/devices/sensor_node.py
+   python src/devices/sensor_node.py garden_1 field_1
    ```
 
-8. **Actuator Nodes**
+8. **Actuator Nodes** (specify garden_id and field_id)
    ```bash
-   python src/devices/actuator_node.py
+   python src/devices/actuator_node.py garden_1 field_1
    ```
 
 ---
@@ -1398,17 +1989,21 @@ The Smart Precision Irrigation System demonstrates a well-architected IoT platfo
 2. **Uses MQTT for Real-time Data**: Efficient pub/sub for sensor readings and commands using SenML format
 3. **Follows Microservices Pattern**: Each service has a single responsibility
 4. **Implements Service Discovery**: All services bootstrap from the Catalogue
-5. **Implements Dynamic Registration**: Devices register via POST (not hardcoded)
-6. **Integrates External APIs**: Weather forecasting (rain + frost) and cloud analytics
-7. **Provides Smart Irrigation**: Crop-type and field-size based duration calculation
-8. **Tracks Resources**: Water consumption (L) per irrigation cycle
-9. **Provides Weather Alerts**: Telegram bot notifications for rain and frost alerts
-10. **Centralized Status**: Status Service provides unified device state access via REST
+5. **Implements Dynamic Registration**: Devices self-register via POST and receive auto-generated IDs
+6. **Supports Multi-Garden Architecture**: Multiple gardens with independent field configurations
+7. **Implements Auto-Discovery**: Water Manager automatically discovers new devices every 60 seconds
+8. **Integrates External APIs**: Weather forecasting (rain + frost) and cloud analytics
+9. **Provides Smart Irrigation**: Crop-type and field-size based duration calculation
+10. **Tracks Resources**: Water consumption (L) per irrigation cycle
+11. **Provides Weather Alerts**: Telegram bot notifications for rain and frost alerts
 
 ### Design Highlights
 
 - **Gravity-Fed Irrigation**: Uses elevated water tanks for energy-efficient water delivery
-- **Status Service Architecture**: Centralized device status cache reduces MQTT subscription overhead
+- **Multi-Garden Support**: Scalable architecture for multiple gardens and fields
+- **Dynamic IDs**: Format: `{type}_{garden_id}_{field_id}_{counter:03d}`
+- **Auto-Discovery**: Water Manager polls Catalogue every 60s for new devices
+- **Automated Launcher**: Python scripts to start/stop all services automatically
 - **Weather-Aware Control**: Automatic irrigation suspension during rain or frost conditions
 
 The combination of REST and MQTT protocols provides the ideal balance between:
@@ -1419,6 +2014,6 @@ The combination of REST and MQTT protocols provides the ideal balance between:
 
 ---
 
-*Document Version: 2.1*  
+*Document Version: 2.2*  
 *Last Updated: January 2026*  
-*System Version: 2.1*
+*System Version: 2.2*

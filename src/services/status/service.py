@@ -116,12 +116,32 @@ class StatusService:
         # Extract device ID from the message
         device_id = self.extract_device_id(data, topic)
 
-        # Store the data
+        # Get existing data for this device (if any)
+        existing = self.latest_data.get(device_id, {})
+        existing_payload = existing.get('payload', [])
+        
+        # Merge payloads - keep all measurements from same device
+        if isinstance(data, list) and isinstance(existing_payload, list):
+            # Create a dict of measurements by name
+            measurements = {}
+            for item in existing_payload:
+                if isinstance(item, dict) and 'n' in item:
+                    measurements[item['n']] = item
+            # Update with new measurements
+            for item in data:
+                if isinstance(item, dict) and 'n' in item:
+                    measurements[item['n']] = item
+            # Convert back to list
+            merged_payload = list(measurements.values())
+        else:
+            merged_payload = data
+
+        # Store the merged data
         self.latest_data[device_id] = {
             "topic": topic,
             "timestamp": timestamp,
             "received_at": time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(timestamp)),
-            "payload": data
+            "payload": merged_payload
         }
 
     def extract_device_id(self, data, topic):

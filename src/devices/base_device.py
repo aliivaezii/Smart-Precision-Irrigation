@@ -5,15 +5,18 @@ This module provides base classes for sensors and actuators following
 the standard course patterns. These classes reduce code duplication
 by providing common functionality:
 
-- BaseDevice: Bootstrap, registration, heartbeat, MQTT connection
+- BaseDevice: Bootstrap, registration (with dynamic ID), heartbeat, MQTT connection
 - BaseSensor: Sensing and publishing readings
 - BaseActuator: Command handling and status publishing
 
 Usage:
+    # New device - ID assigned by Catalogue
     class MySensor(BaseSensor):
         def sense(self):
-            # Return sensor readings
             return {'temperature': 25.0}
+    
+    sensor = MySensor(catalogue_url, garden_id='garden_1', field_id='field_1')
+    sensor.run()
 """
 
 import sys
@@ -31,26 +34,38 @@ class BaseDevice:
     Base class for all IoT devices.
     
     Provides common functionality:
-    - Bootstrap from Catalogue
-    - Device registration via POST
+    - Self-registration via POST (ID assigned by Catalogue)
+    - Bootstrap from Catalogue after registration
     - Heartbeat mechanism
     - MQTT connection management
     """
     
-    def __init__(self, catalogue_url, device_id):
+    def __init__(self, catalogue_url, garden_id='garden_1', field_id='field_1', device_type='sensor'):
         """
-        Initialize the device.
+        Initialize and register the device with the Catalogue.
+        
+        The Catalogue assigns a unique ID to this device.
         
         Args:
             catalogue_url: URL of the Catalogue service (e.g., 'http://localhost:8080/')
-            device_id: Unique identifier for this device
+            garden_id: ID of the garden this device belongs to
+            field_id: ID of the field within the garden
+            device_type: 'sensor' or 'actuator'
         """
         self.catalogue_url = catalogue_url
-        self.device_id = device_id
+        self.garden_id = garden_id
+        self.field_id = field_id
+        self.device_type = device_type
         self.client = None
+        self.device_id = None
+        self.topics = {}
         
-        # Bootstrap: Get config from Catalogue
-        print(f"[{device_id}] Fetching config from {catalogue_url}...")
+        # Step 1: Register with Catalogue and get assigned ID
+        print(f"[{device_type}] Registering with Catalogue...")
+        self._self_register()
+        
+        # Step 2: Bootstrap - get full config from Catalogue
+        print(f"[{self.device_id}] Fetching config from {catalogue_url}...")
         res = requests.get(catalogue_url)
         self.config = res.json()
         
@@ -58,45 +73,41 @@ class BaseDevice:
         self.broker = self.config['broker']['address']
         self.port = self.config['broker']['port']
         
-        # Find my device in the list
-        self.device_config = self._find_device_config()
-        if not self.device_config:
-            raise ValueError(f"Device {device_id} not found in Catalogue!")
+        # Get field configuration from garden
+        gardens = self.config.get('gardens', {})
+        if garden_id in gardens:
+            garden_config = gardens[garden_id]
+            fields = garden_config.get('fields', {})
+            self.field_config = fields.get(field_id, {})
+        else:
+            self.field_config = {}
         
-        self.name = self.device_config.get('name', device_id)
-        
-        print(f"[{device_id}] Broker: {self.broker}:{self.port}")
+        print(f"[{self.device_id}] Broker: {self.broker}:{self.port}")
+        print(f"[{self.device_id}] Garden: {garden_id}, Field: {field_id}")
 
-    def _find_device_config(self):
-        """Find this device's configuration in the Catalogue."""
-        for d in self.config.get('devices', []):
-            if d['id'] == self.device_id:
-                return d
-        return None
-
-    def register(self, device_type, publish_topics, subscribe_topics):
+    def _self_register(self):
         """
         Register this device with the Catalogue via POST.
-        
-        Args:
-            device_type: 'sensor' or 'actuator'
-            publish_topics: List of topics this device publishes to
-            subscribe_topics: List of topics this device subscribes to
+        Catalogue assigns a unique ID and returns topics.
         """
         payload = {
-            "id": self.device_id,
-            "name": self.name,
-            "type": device_type,
-            "topics": {
-                "publish": publish_topics,
-                "subscribe": subscribe_topics
-            }
+            "type": self.device_type,
+            "garden_id": self.garden_id,
+            "field_id": self.field_id,
+            "name": f"{self.device_type.title()} {self.garden_id} {self.field_id}"
         }
         
         url = f"{self.catalogue_url}devices"
         res = requests.post(url, json=payload)
         result = res.json()
-        print(f"[{self.device_id}] Registration: {result['status']}")
+        
+        # Get assigned ID and topics from Catalogue
+        self.device_id = result['id']
+        self.topics = result.get('topics', {})
+        self.name = payload['name']
+        
+        print(f"[{self.device_id}] Registered successfully!")
+        print(f"[{self.device_id}] Topics: {self.topics}")
 
     def heartbeat(self):
         """Send heartbeat to Catalogue to keep registration alive."""
@@ -135,19 +146,16 @@ class BaseSensor(BaseDevice):
     - sense(): Return a dictionary of sensor readings
     """
     
-    def __init__(self, catalogue_url, device_id):
-        """Initialize the sensor."""
-        super().__init__(catalogue_url, device_id)
+    def __init__(self, catalogue_url, garden_id='garden_1', field_id='field_1'):
+        """Initialize the sensor and register with Catalogue."""
+        super().__init__(catalogue_url, garden_id, field_id, device_type='sensor')
         
-        # Get publish topics from device config
-        self.publish_topics = self.device_config['topics'].get('publish', [])
+        # Get publish topics from registration response
+        self.publish_topics = self.topics.get('publish', [])
         if isinstance(self.publish_topics, str):
             self.publish_topics = [self.publish_topics]
         
-        print(f"[{device_id}] Topics: {self.publish_topics}")
-        
-        # Register with Catalogue
-        self.register('sensor', self.publish_topics, [])
+        print(f"[{self.device_id}] Publish topics: {self.publish_topics}")
         
         # Start MQTT client (no notifier needed for sensors)
         self.start_mqtt()
@@ -229,24 +237,21 @@ class BaseActuator(BaseDevice):
     - execute_command(command, params): Execute the received command
     """
     
-    def __init__(self, catalogue_url, device_id):
-        """Initialize the actuator."""
-        super().__init__(catalogue_url, device_id)
+    def __init__(self, catalogue_url, garden_id='garden_1', field_id='field_1'):
+        """Initialize the actuator and register with Catalogue."""
+        super().__init__(catalogue_url, garden_id, field_id, device_type='actuator')
         
-        # Get topics from device config
-        self.subscribe_topics = self.device_config['topics'].get('subscribe', [])
-        self.publish_topics = self.device_config['topics'].get('publish', [])
+        # Get topics from registration response
+        self.subscribe_topics = self.topics.get('subscribe', [])
+        self.publish_topics = self.topics.get('publish', [])
         
         if isinstance(self.subscribe_topics, str):
             self.subscribe_topics = [self.subscribe_topics]
         if isinstance(self.publish_topics, str):
             self.publish_topics = [self.publish_topics]
         
-        print(f"[{device_id}] Subscribe: {self.subscribe_topics}")
-        print(f"[{device_id}] Publish: {self.publish_topics}")
-        
-        # Register with Catalogue
-        self.register('actuator', self.publish_topics, self.subscribe_topics)
+        print(f"[{self.device_id}] Subscribe: {self.subscribe_topics}")
+        print(f"[{self.device_id}] Publish: {self.publish_topics}")
         
         # Start MQTT client with this object as notifier
         self.start_mqtt(notifier=self)

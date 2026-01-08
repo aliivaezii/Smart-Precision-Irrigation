@@ -14,7 +14,8 @@ class ThingSpeakAdaptor:
     
     Subscribes to sensor and resource usage topics for Field 1 only.
     Uploads soil moisture, temperature, and water usage to ThingSpeak.
-
+    
+    Note: Simplified to Field 1 only due to ThingSpeak channel limitations.
     """
     
     API_URL = "https://api.thingspeak.com/update"
@@ -57,16 +58,15 @@ class ThingSpeakAdaptor:
         # Water needed topic (from Water Manager)
         self.topic_water_needed = "smart_irrigation/farm/field_1/water_needed"
         
-        # Find sensor topics for Field 1 ONLY
-        self.sensor_topics = []
-        for d in data['devices']:
-            if d['type'] == 'sensor':
-                # Only subscribe to field_1 sensors
-                if 'field_1' in d['id']:
-                    for topic in d['topics']['publish']:
-                        self.sensor_topics.append(topic)
+        # Get topic prefix for wildcard subscription
+        project_info = data.get('project_info', {})
+        self.topic_prefix = project_info.get('topic_prefix', 'smart_irrigation')
         
-        print(f"[ThingSpeak] Found {len(self.sensor_topics)} sensor topics for Field 1")
+        # Wildcard topic for ALL field_1 sensor data
+        # This ensures we get data even if devices register after startup
+        self.wildcard_topic = f"{self.topic_prefix}/farm/garden_1/field_1/#"
+        
+        print(f"[ThingSpeak] Using wildcard topic: {self.wildcard_topic}")
         
         # Start MQTT
         self.client = MyMQTT('thingspeak_adaptor', self.broker, self.port, notifier=self)
@@ -156,10 +156,9 @@ class ThingSpeakAdaptor:
 
     def run(self):
         """Subscribe to topics and run forever."""
-        # Subscribe to Field 1 sensor topics
-        for topic in self.sensor_topics:
-            self.client.subscribe(topic, qos=0)
-            print(f"[ThingSpeak] Subscribed to sensor: {topic}")
+        # Subscribe to wildcard topic for all field_1 data
+        self.client.subscribe(self.wildcard_topic, qos=0)
+        print(f"[ThingSpeak] Subscribed to: {self.wildcard_topic}")
         
         # Subscribe to resource usage (water consumption)
         self.client.subscribe(self.topic_resource, qos=0)
