@@ -141,19 +141,35 @@ You can register new devices manually using **Postman** or any REST client. The 
 
 > **Note**: The Catalogue generates a unique ID and MQTT topics automatically. The Water Manager auto-discovers new devices every 60 seconds.
 
-### ⚠️ Important: Running Registered Devices
+### 🤖 Auto-Simulation with Device Simulator
 
-Registering a device via POST only creates its **configuration** in the Catalogue. To actually **run** the device (publish sensor data or respond to actuator commands), you must start a Python process:
+The **Device Simulator** automatically discovers and simulates ALL registered devices. No need to manually run individual device scripts!
+
+**How it works:**
+1. POST a new device to `/devices` (e.g., via Postman)
+2. The Device Simulator detects it within 60 seconds
+3. Starts simulating it automatically (publishing sensor data or listening for commands)
+
+**Running the Device Simulator:**
+```bash
+python src/devices/device_simulator.py
+```
+
+> **Tip**: The launcher scripts (`scripts/macos/start.py`) automatically start the Device Simulator!
+
+### 📋 Manual Device Scripts (Alternative)
+
+If you prefer to run individual device processes manually:
 
 ```bash
-# After registering a sensor for garden_1/field_3:
+# Run a specific sensor
 python src/devices/sensor_node.py garden_1 field_3
 
-# After registering an actuator for garden_1/field_3:
+# Run a specific actuator
 python src/devices/actuator_node.py garden_1 field_3
 ```
 
-**Why?** In a real IoT deployment, each device is a physical microcontroller. The Python scripts simulate these devices. The POST registration pre-configures the Catalogue, but the device process must run to publish/receive MQTT messages.
+**Why manual mode?** In a real IoT deployment, each device is a physical microcontroller. The manual scripts simulate a single physical device each.
 
 ---
 
