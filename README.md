@@ -29,16 +29,16 @@ The software strictly follows **Object-Oriented Programming (OOP)** principles a
 
 ### 1. The Edge Layer (Sensors & Actuators)
 Running on **Raspberry Pi Pico 2 W** microcontrollers:
-* **Sensor Nodes:** Collect Soil Moisture and Temperature. Register via POST, send heartbeats.
-* **Actuator Nodes:** Control Solenoid Valves (gravity-fed). Track water usage. Register via POST.
+* **Sensor Nodes (1):** Collect Soil Moisture and Temperature. Publish readings via MQTT. Register via POST, send heartbeats.
+* **Actuator Nodes (1,2):** Control Solenoid Valves (gravity-fed). Subscribe to valve commands, publish valve status and water usage. Register via POST.
 
 ### 2. The Service Layer (Core Logic)
 Running on a **Raspberry Pi 5** Gateway, communicating via **MQTT** and **REST**:
 * **Resource Catalogue (port 8080):** Central registry with full CRUD (GET/POST/PUT/DELETE) for devices.
 * **Status Service (port 9090):** Caches all device states with smart payload merging (combines soil_moisture + temperature from same sensor). Provides REST API for status queries.
 * **Water Manager:** The brain of the operation. Uses **smart irrigation logic** based on crop type and field size.
-* **Weather-Check:** Background service polling Open-Meteo for rain AND frost forecasts.
-* **Telegram Bot:** Sends weather alerts and allows users to view system status.
+* **Weather-Check:** Background service polling Open-Meteo for rain AND frost forecasts. Publishes alerts via MQTT.
+* **Telegram Bot:** Subscribes to weather/frost alerts via MQTT and forwards them to users. Queries Status Service via REST for system status.
 * **ThingSpeak Adaptor:** Uploads sensor data from Field 1 to the cloud using wildcard MQTT subscriptions (works even when devices register after startup).
 
 ---
@@ -228,10 +228,18 @@ The system supports multiple gardens, each with their own fields and crop config
 
 All MQTT messages follow the course-standard SenML format:
 
+**Sensor Data (numeric values):**
 ```json
 [
-    {"bn": "sensor_node_field_1", "n": "soil_moisture", "t": 1735084800.0, "v": 25.5},
-    {"bn": "sensor_node_field_1", "n": "temperature", "t": 1735084800.0, "v": 22.1}
+    {"bn": "sensor_garden_1_field_1_001", "n": "soil_moisture", "t": 1735084800.0, "v": 25.5},
+    {"bn": "sensor_garden_1_field_1_001", "n": "temperature", "t": 1735084800.0, "v": 22.1}
+]
+```
+
+**Actuator Status (string values):**
+```json
+[
+    {"bn": "actuator_garden_1_field_1_001", "n": "valve_status", "t": 1735084800.0, "vs": "OPEN"}
 ]
 ```
 
@@ -240,7 +248,8 @@ All MQTT messages follow the course-standard SenML format:
 | `bn` | Base name (device ID) |
 | `n` | Measurement name |
 | `t` | Timestamp (Unix epoch) |
-| `v` | Value (single value, not nested) |
+| `v` | Numeric value (moisture, temperature, water_liters) |
+| `vs` | String value (valve_status: "OPEN"/"CLOSED") |
 
 ---
 
