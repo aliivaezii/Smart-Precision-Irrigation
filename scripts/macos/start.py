@@ -31,7 +31,7 @@ PROJECT_ROOT = os.path.abspath(os.path.join(SCRIPT_DIR, "..", ".."))
 # Format: (name, relative_path, delay_after_start)
 SERVICES = [
     ("Catalogue Service", "src/services/catalogue/service.py", 3),
-    ("Status Service", "src/services/status_service/service.py", 1),
+    ("Status Service", "src/services/status/service.py", 1),
     ("Weather Check", "src/services/weather_check/service.py", 1),
     ("Water Manager", "src/services/water_manager/service.py", 1),
     ("Telegram Bot", "src/services/telegram_bot/service.py", 1),
