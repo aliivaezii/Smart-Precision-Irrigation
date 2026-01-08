@@ -1,184 +1,131 @@
 """
-ActuatorNode.py - Solenoid Valve Controller
+Actuator Node - Solenoid Valve Controller
 
-This actor represents physical valve actuators in a gravity-fed irrigation system.
-It follows the standard course pattern:
-1. __init__: Bootstrap configuration from Catalogue
-2. Register itself with the Catalogue via POST
-3. Subscribe to command topic via MQTT
-4. Simulate valve operation when commands are received
+This actuator extends BaseActuator to control solenoid valves
+in a gravity-fed irrigation system.
 
+The actuator:
+1. Bootstraps from Catalogue (via BaseActuator)
+2. Registers itself via POST (via BaseActuator)
+3. Subscribes to command topics via MQTT
+4. Executes valve OPEN/CLOSE commands
+5. Tracks and publishes water consumption
 """
 
-import sys
-import os
-sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'common'))
-
-from MyMQTT import MyMQTT
 import time
-import requests
 import json
+from base_device import BaseActuator
 
 
-class ActuatorNode:
+class ActuatorNode(BaseActuator):
     """
-    Actuator Node - Controls Solenoid Valves
+    Solenoid Valve Controller for Gravity-Fed Irrigation.
     
-    Subscribes to command topic and simulates valve operation.
-    Publishes status updates and water consumption when state changes.
-
+    Extends BaseActuator with valve control logic and
+    water consumption tracking.
     """
     
-    # Simulation constants
-    FLOW_RATE_LPM = 20.0  # Liters per minute (default)
+    # Default flow rate (can be overridden by Catalogue config)
+    DEFAULT_FLOW_RATE = 20.0  # Liters per minute
     
     def __init__(self, catalogue_url, device_id):
-        self.catalogue_url = catalogue_url
-        self.device_id = device_id
+        """Initialize the valve actuator."""
+        # Call parent init (bootstrap, register, start MQTT)
+        super().__init__(catalogue_url, device_id)
+        
+        # Valve state
         self.is_open = False
         self.last_command_time = None
         self.current_duration = 0
         
-        # 1. Bootstrap: Get config from Catalogue
-        print(f"[Actuator {device_id}] Fetching config from {catalogue_url}...")
-        res = requests.get(catalogue_url)
-        data = res.json()
-        
-        # Get broker info
-        self.broker = data['broker']['address']
-        self.port = data['broker']['port']
-        
-        # Get field-specific config (for flow rate)
+        # Get field-specific config for flow rate
         field_id = '_'.join(device_id.split('_')[-2:])  # e.g., "field_1"
-        fields_config = data.get('fields', {})
+        fields_config = self.config.get('fields', {})
         field_config = fields_config.get(field_id, {})
-        self.flow_rate = field_config.get('flow_rate_lpm', self.FLOW_RATE_LPM)
+        self.flow_rate = field_config.get('flow_rate_lpm', self.DEFAULT_FLOW_RATE)
         
         # Get resource monitoring topic
-        topics_config = data.get('topics', {})
+        topics_config = self.config.get('topics', {})
         self.topic_resource = topics_config.get('resource_usage', 'smart_irrigation/irrigation/usage')
         
-        # 2. Find my device configuration in the list
-        my_device = None
-        for d in data['devices']:
-            if d['id'] == device_id:
-                my_device = d
-                break
-        
-        if not my_device:
-            raise ValueError(f"Device {device_id} not found in Catalogue!")
-        
-        # Get my topics
-        self.subscribe_topics = my_device['topics'].get('subscribe', [])
-        self.publish_topics = my_device['topics'].get('publish', [])
-        
-        if isinstance(self.subscribe_topics, str):
-            self.subscribe_topics = [self.subscribe_topics]
-        if isinstance(self.publish_topics, str):
-            self.publish_topics = [self.publish_topics]
-        
-        self.name = my_device.get('name', device_id)
-        
-        print(f"[Actuator {device_id}] Configured:")
-        print(f"    Broker: {self.broker}:{self.port}")
-        print(f"    Subscribe: {self.subscribe_topics}")
-        print(f"    Publish: {self.publish_topics}")
-        
-        # 3. Register with Catalogue (POST)
-        self.register()
-        
-        # 4. Start MQTT client with callback
-        self.client = MyMQTT(device_id, self.broker, self.port, notifier=self)
-        self.client.start()
-        time.sleep(1)
+        print(f"[{device_id}] Flow rate: {self.flow_rate} L/min")
 
-    def register(self):
-        """Register this actuator with the Catalogue via POST."""
-        payload = {
-            "id": self.device_id,
-            "name": self.name,
-            "type": "actuator",
-            "topics": {"subscribe": self.subscribe_topics, "publish": self.publish_topics}
-        }
-        
-        url = f"{self.catalogue_url}devices"
-        res = requests.post(url, json=payload)
-        result = res.json()
-        print(f"[Actuator {self.device_id}] Registration: {result['status']}")
-
-    def notify(self, topic, payload):
+    def execute_command(self, command, params):
         """
-        Callback when MQTT message is received.
-        Handles valve commands: OPEN, CLOSE
+        Execute valve commands.
+        
+        Args:
+            command: 'OPEN' or 'CLOSE'
+            params: Command parameters (may include 'duration')
         """
-        try:
-            data = json.loads(payload)
-        except json.JSONDecodeError:
-            print(f"[Actuator {self.device_id}] Invalid JSON received")
-            return
-        
-        command = data.get('command', '').upper()
-        duration = data.get('duration', 0)
-        
-        print(f"[Actuator {self.device_id}] Received command: {command}")
-        
         if command == 'OPEN':
+            duration = params.get('duration', 0)
             self.open_valve(duration)
         elif command == 'CLOSE':
             self.close_valve()
         else:
-            print(f"[Actuator {self.device_id}] Unknown command: {command}")
+            print(f"[{self.device_id}] Unknown command: {command}")
 
     def open_valve(self, duration=0):
-        """Simulate opening the valve."""
-        if not self.is_open:
-            self.is_open = True
-            self.last_command_time = time.time()
-            self.current_duration = duration
-            
-            print("=" * 50)
-            print(f"[Actuator {self.device_id}] >>> VALVE OPENED <<<")
-            if duration > 0:
-                print(f"[Actuator {self.device_id}] Duration: {duration} seconds")
-            print("=" * 50)
-            
-            # Publish status update
-            self.publish_status("OPEN", duration)
-        else:
-            print(f"[Actuator {self.device_id}] Valve already open")
+        """Open the valve."""
+        if self.is_open:
+            print(f"[{self.device_id}] Valve already open")
+            return
+        
+        self.is_open = True
+        self.last_command_time = time.time()
+        self.current_duration = duration
+        
+        print("=" * 50)
+        print(f"[{self.device_id}] >>> VALVE OPENED <<<")
+        if duration > 0:
+            print(f"[{self.device_id}] Duration: {duration} seconds")
+        print("=" * 50)
+        
+        # Publish status
+        self.publish_status({
+            'valve_status': 'OPEN',
+            'duration': duration
+        })
 
     def close_valve(self):
-        """Simulate closing the valve and calculate water usage."""
-        if self.is_open:
-            self.is_open = False
-            
-            # Calculate actual duration and water consumption
-            actual_duration = 0
-            if self.last_command_time:
-                actual_duration = time.time() - self.last_command_time
-            
-            # Calculate water usage: flow_rate (L/min) * duration (min)
-            water_liters = (self.flow_rate * actual_duration) / 60.0
-            
-            print("=" * 50)
-            print(f"[Actuator {self.device_id}] >>> VALVE CLOSED <<<")
-            print(f"[Actuator {self.device_id}] Duration: {actual_duration:.1f}s")
-            print(f"[Actuator {self.device_id}] Water used: {water_liters:.2f} liters")
-            print("=" * 50)
-            
-            # Publish status update
-            self.publish_status("CLOSED", actual_duration)
-            
-            # Publish resource usage for ThingSpeak
-            self.publish_resource_usage(water_liters, actual_duration)
-        else:
-            print(f"[Actuator {self.device_id}] Valve already closed")
+        """Close the valve and calculate water usage."""
+        if not self.is_open:
+            print(f"[{self.device_id}] Valve already closed")
+            return
+        
+        self.is_open = False
+        
+        # Calculate duration and water consumption
+        actual_duration = 0
+        if self.last_command_time:
+            actual_duration = time.time() - self.last_command_time
+        
+        # Water usage: flow_rate (L/min) * duration (min)
+        water_liters = (self.flow_rate * actual_duration) / 60.0
+        
+        print("=" * 50)
+        print(f"[{self.device_id}] >>> VALVE CLOSED <<<")
+        print(f"[{self.device_id}] Duration: {actual_duration:.1f}s")
+        print(f"[{self.device_id}] Water used: {water_liters:.2f} liters")
+        print("=" * 50)
+        
+        # Publish status
+        self.publish_status({
+            'valve_status': 'CLOSED',
+            'duration': actual_duration
+        })
+        
+        # Publish resource usage for ThingSpeak
+        self.publish_resource_usage(water_liters, actual_duration)
 
     def publish_resource_usage(self, water_liters, duration):
         """
         Publish water consumption in SenML format.
         
-        Note: Gravity-fed system - no energy tracking needed.
+        Args:
+            water_liters: Amount of water used
+            duration: Duration in seconds
         """
         msg = [
             {
@@ -195,61 +142,14 @@ class ActuatorNode:
             }
         ]
         
-        # Publish to resource topic (irrigation/usage)
         self.client.publish(self.topic_resource, json.dumps(msg))
-        print(f"[Actuator {self.device_id}] Published usage: {water_liters:.2f}L")
-
-    def publish_status(self, status, duration=0):
-        """Publish current valve status in SenML format."""
-        msg = [
-            {
-                'bn': self.device_id,
-                'n': 'valve_status',
-                't': time.time(),
-                'v': status
-            },
-            {
-                'bn': self.device_id,
-                'n': 'duration',
-                't': time.time(),
-                'v': duration
-            }
-        ]
-        
-        for topic in self.publish_topics:
-            self.client.publish(topic, json.dumps(msg))
-            print(f"[Actuator {self.device_id}] Published status to {topic}")
-
-    def heartbeat(self):
-        """Send heartbeat to Catalogue (keeps registration alive)."""
-        url = f"{self.catalogue_url}devices"
-        requests.post(url, json={"id": self.device_id})
-
-    def run(self):
-        """Subscribe to command topics and run forever."""
-        for topic in self.subscribe_topics:
-            self.client.subscribe(topic, qos=1)
-            print(f"[Actuator {self.device_id}] Subscribed to {topic}")
-        
-        print(f"[Actuator {self.device_id}] Running... waiting for commands")
-        
-        count = 0
-        while True:
-            # Heartbeat every 60 iterations (~60s)
-            count += 1
-            if count >= 60:
-                self.heartbeat()
-                count = 0
-            
-            time.sleep(1)
+        print(f"[{self.device_id}] Published usage: {water_liters:.2f}L")
 
     def stop(self):
-        """Stop the actuator and close valve."""
+        """Stop the actuator and close valve if open."""
         if self.is_open:
             self.close_valve()
-        self.client.stop()
-        print(f"[Actuator {self.device_id}] Stopped")
-
+        super().stop()
 
 
 if __name__ == '__main__':
@@ -258,6 +158,7 @@ if __name__ == '__main__':
     device_id = 'actuator_valve_1'
     
     actuator = ActuatorNode(catalogue_url, device_id)
+    
     try:
         actuator.run()
     except KeyboardInterrupt:

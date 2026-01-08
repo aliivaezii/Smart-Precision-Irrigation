@@ -219,35 +219,136 @@ class MyMQTT:
 
 ---
 
-### 5.2 Device Layer
+### 5.2 Base Device Classes
+
+#### `src/devices/base_device.py`
+
+**Purpose**: Provides reusable base classes for all IoT devices. Uses inheritance to avoid code duplication between sensors and actuators.
+
+**Class Hierarchy**:
+```
+BaseDevice (parent class)
+    ├── BaseSensor (for sensor devices)
+    │       └── SensorNode (soil moisture + temperature)
+    │
+    └── BaseActuator (for actuator devices)
+            └── ActuatorNode (solenoid valve)
+```
+
+#### BaseDevice Class
+
+**Purpose**: Common functionality for all devices (bootstrap, registration, heartbeat, MQTT).
+
+**Key Methods**:
+```python
+class BaseDevice:
+    def __init__(self, catalogue_url, device_id):
+        # Stores Catalogue URL and device ID
+        # Calls bootstrap() to get configuration
+
+    def bootstrap(self):
+        # REST GET to Catalogue for broker and device config
+
+    def register(self, device_type, publish_topics, subscribe_topics):
+        # REST POST to Catalogue to register the device
+
+    def heartbeat(self):
+        # REST POST to Catalogue with device ID (keep-alive)
+
+    def start_mqtt(self, notifier=None):
+        # Creates MyMQTT client and connects to broker
+
+    def stop(self):
+        # Stops MQTT client gracefully
+```
+
+**Registration Payload**:
+```json
+{
+    "id": "sensor_node_field_1",
+    "name": "Soil Sensor Field 1",
+    "type": "sensor",
+    "topics": {
+        "publish": ["farm/field_1/soil_moisture", "farm/field_1/temperature"],
+        "subscribe": []
+    }
+}
+```
+
+#### BaseSensor Class
+
+**Purpose**: Base class for sensor devices. Extends BaseDevice with sensing and publishing logic.
+
+**Key Methods**:
+```python
+class BaseSensor(BaseDevice):
+    def sense(self):
+        # Abstract method - subclass must implement
+        # Returns dict like {"soil_moisture": 45.2, "temperature": 22.5}
+        raise NotImplementedError()
+
+    def publish_reading(self, readings):
+        # Creates SenML list from readings dict
+        # Publishes to each topic from device config
+
+    def run(self, freq=10, heartbeat_interval=6):
+        # Main loop: sense → publish → sleep → repeat
+        # Sends heartbeat every N cycles
+```
+
+#### BaseActuator Class
+
+**Purpose**: Base class for actuator devices. Extends BaseDevice with command handling.
+
+**Key Methods**:
+```python
+class BaseActuator(BaseDevice):
+    def notify(self, topic, payload):
+        # MQTT callback - receives commands
+        # Parses JSON and calls execute_command()
+
+    def execute_command(self, command, params):
+        # Abstract method - subclass must implement
+        # Example: command="OPEN", params={"duration": 300}
+        raise NotImplementedError()
+
+    def publish_status(self, status_data):
+        # Creates SenML list from status dict
+        # Publishes to valve_status topic
+
+    def run(self, heartbeat_interval=60):
+        # Main loop: just heartbeat
+        # Commands handled via MQTT callback
+```
+
+---
+
+### 5.3 Sensor Layer
 
 #### `src/devices/sensor_node.py`
 
-**Purpose**: Simulates a soil moisture and temperature sensor node.
+**Purpose**: Soil moisture and temperature sensor. Extends `BaseSensor` class.
 
-**Initialization Flow**:
-1. **Bootstrap via REST GET**: Fetches configuration from Catalogue Service
-2. **Extract MQTT Broker**: Gets broker address and port
-3. **Find Device Config**: Locates its own publish topics from device list
-4. **Register via REST POST**: Registers itself with the Catalogue
-5. **Start MQTT Client**: Connects to broker for publishing
+**Inheritance**: `SensorNode` → `BaseSensor` → `BaseDevice`
 
-**Registration (POST /devices)**:
+**What SensorNode Implements**:
+Only the `sense()` method - all other logic (bootstrap, register, heartbeat, MQTT, publish) is inherited from base classes.
+
 ```python
-def register(self):
-    payload = {
-        "id": self.device_id,
-        "name": self.name,
-        "type": "sensor",
-        "topics": {"publish": self.topics, "subscribe": []}
-    }
-    url = f"{self.catalogue_url}devices"
-    res = requests.post(url, json=payload)
-    result = res.json()
-    print(f"[Sensor {self.device_id}] Registration: {result['status']}")
+class SensorNode(BaseSensor):
+    def sense(self):
+        # Simulates reading from soil moisture and temperature sensors
+        # Returns: {"soil_moisture": 45.2, "temperature": 22.5}
+        return {
+            "soil_moisture": random.uniform(30.0, 70.0),
+            "temperature": random.uniform(15.0, 35.0)
+        }
 ```
 
-**Heartbeat**: Sends POST with device ID every ~60 seconds to keep registration alive.
+**Why Inheritance Works**:
+- `BaseSensor.run()` calls `self.sense()` which runs `SensorNode.sense()`
+- All registration, heartbeat, and MQTT logic is reused from base classes
+- SensorNode is only ~50 lines instead of ~110 lines
 
 **Data Format (SenML List)**:
 ```json
@@ -257,57 +358,54 @@ def register(self):
 ]
 ```
 
-**Communication**:
+**Communication** (inherited from BaseDevice/BaseSensor):
 - **REST GET** → Catalogue (bootstrap)
 - **REST POST** → Catalogue (registration + heartbeat)
 - **MQTT Publish** → `farm/field_X/soil_moisture`, `farm/field_X/temperature`
 
 ---
 
-### 5.3 Actuator Layer
+### 5.4 Actuator Layer
 
 #### `src/devices/actuator_node.py`
 
-**Purpose**: Controls solenoid valves for gravity-fed irrigation. Tracks water consumption.
+**Purpose**: Controls solenoid valves for gravity-fed irrigation. Extends `BaseActuator` class.
+
+**Inheritance**: `ActuatorNode` → `BaseActuator` → `BaseDevice`
 
 **System Design**: The system uses gravity-fed irrigation from elevated water tanks. This design eliminates the need for electric pumps, reducing energy consumption and hardware complexity.
 
-**Initialization Flow**:
-1. **Bootstrap via REST GET**: Fetches configuration from Catalogue Service
-2. **Register via REST POST**: Registers itself with the Catalogue
-3. **Extract Field Config**: Gets flow rate from field configuration
-4. **Start MQTT Client**: Connects to broker for command subscription
+**What ActuatorNode Implements**:
+Only the `execute_command()` method and valve-specific logic - all other logic (bootstrap, register, heartbeat, MQTT, notify) is inherited from base classes.
 
-**Registration (POST /devices)**:
 ```python
-def register(self):
-    payload = {
-        "id": self.device_id,
-        "name": self.name,
-        "type": "actuator",
-        "topics": {"subscribe": self.subscribe_topics, "publish": self.publish_topics}
-    }
-    url = f"{self.catalogue_url}devices"
-    res = requests.post(url, json=payload)
-    result = res.json()
-    print(f"[Actuator {self.device_id}] Registration: {result['status']}")
+class ActuatorNode(BaseActuator):
+    def execute_command(self, command, params):
+        # Handles OPEN and CLOSE commands for valve
+        if command == 'OPEN':
+            duration = params.get('duration', 60)
+            self.open_valve(duration)
+        elif command == 'CLOSE':
+            self.close_valve()
+
+    def open_valve(self, duration):
+        # Opens valve, starts timer thread for auto-close
+
+    def close_valve(self):
+        # Closes valve, calculates water used, publishes usage
+
+    def publish_resource_usage(self, water_liters, duration_sec):
+        # Publishes water consumption to irrigation/usage topic
 ```
 
-**Heartbeat**: Sends POST with device ID every ~60 seconds to keep registration alive.
+**Why Inheritance Works**:
+- `BaseActuator.notify()` parses MQTT message and calls `self.execute_command()`
+- `ActuatorNode.execute_command()` handles the specific valve logic
+- ActuatorNode is only ~160 lines instead of ~270 lines
 
 **Key Constants**:
 ```python
 FLOW_RATE_LPM = 20.0      # Liters per minute (gravity-fed flow rate)
-```
-
-**Command Handling**:
-```python
-def notify(self, topic, payload):
-    # Receives: {"command": "OPEN", "duration": 300}
-    if command == 'OPEN':
-        self.open_valve(duration)
-    elif command == 'CLOSE':
-        self.close_valve()
 ```
 
 **Resource Calculation (on valve close)**:
@@ -323,7 +421,7 @@ water_liters = (flow_rate * duration_sec) / 60.0
 ]
 ```
 
-**Communication**:
+**Communication** (inherited from BaseDevice/BaseActuator):
 - **REST GET** → Catalogue (bootstrap)
 - **REST POST** → Catalogue (registration + heartbeat)
 - **MQTT Subscribe** → `farm/field_X/valve_cmd`
@@ -331,7 +429,7 @@ water_liters = (flow_rate * duration_sec) / 60.0
 
 ---
 
-### 5.4 Service Layer
+### 5.5 Service Layer
 
 #### `src/services/catalogue/service.py`
 
