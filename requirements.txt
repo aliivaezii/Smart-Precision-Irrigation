@@ -6,12 +6,11 @@ paho-mqtt>=1.6.1          # MQTT client for Pub/Sub messaging
 requests>=2.31.0          # HTTP client for REST API calls (Weather, ThingSpeak)
 
 # ==================== Web Framework ====================
-cherrypy>=18.8.0          # REST API framework for Catalogue Service
+cherrypy>=18.8.0          # REST API framework for Catalogue and Status Service
 
 # ==================== Telegram Bot ====================
-telepot>=12.7             # Telegram Bot API wrapper (used in project)
-# python-telegram-bot>=20.0  # Alternative Telegram library (if needed)
+telepot>=12.7             # Telegram Bot API wrapper
 
-# ==================== Data Processing ====================
-pandas>=2.0.0             # Data processing (optional, for analytics)
-numpy>=1.24.0             # Numerical operations
+# ==================== Optional (for future analytics) ====================
+# pandas>=2.0.0           # Data processing (uncomment if needed)
+# numpy>=1.24.0           # Numerical operations (uncomment if needed)
