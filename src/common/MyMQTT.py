@@ -1,3 +1,17 @@
+"""
+Catalogue Service - Central Device and Service Registry
+
+This is the core registry for the Smart Irrigation System.
+All devices and services bootstrap from this Catalogue.
+
+Features:
+- Full CRUD operations for devices (GET/POST/PUT/DELETE)
+- Dynamic device ID generation
+- Multi-garden support with field configurations
+- Service registration and discovery
+- Persistent storage in JSON config file
+"""
+
 import paho.mqtt.client as mqtt
 
 
