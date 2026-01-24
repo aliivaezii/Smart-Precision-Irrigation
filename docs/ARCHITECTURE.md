@@ -62,7 +62,7 @@ System
 
 ### 2.1 System Architecture
 
-![Smart Precision Irrigation System Architecture](ARCHITECTURE.pdf)
+![Smart Precision Irrigation System Architecture](ARCHITECTURE.jpeg)
 
 ### 2.2 Legend
 
@@ -2016,4 +2016,5 @@ The combination of REST and MQTT protocols provides the ideal balance between:
 *Document Version: 2.2*  
 *Last Updated: January 2026*  
 *System Version: 2.2*
+
 
