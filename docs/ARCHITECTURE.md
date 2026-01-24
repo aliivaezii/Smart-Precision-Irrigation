@@ -751,13 +751,15 @@ topics = {
 }
 ```
 
-> **⚠️ Important**: POST registration only creates the device configuration in the Catalogue. To actually run the device (publish sensor data or respond to commands), you must start a Python process:
+> **✅ Auto-Discovery**: The Device Simulator automatically detects new devices! After POST registration, the simulator will discover and start simulating the new device within 60 seconds - no manual process startup required.
+>
+> **Alternative (Manual Mode)**: If you prefer to run individual device processes manually:
 > ```bash
-> # After POST registration for garden_1/field_3:
+> # Run specific device processes:
 > python src/devices/sensor_node.py garden_1 field_3
 > python src/devices/actuator_node.py garden_1 field_3
 > ```
-> In a real deployment, each device is a physical microcontroller. The Python scripts simulate these devices.
+> This is useful for testing or simulating physical microcontrollers individually.
 
 **Multi-Garden Structure** (in system_config.json):
 ```json
@@ -2016,6 +2018,7 @@ The combination of REST and MQTT protocols provides the ideal balance between:
 *Document Version: 2.2*  
 *Last Updated: January 2026*  
 *System Version: 2.2*
+
 
 
 
