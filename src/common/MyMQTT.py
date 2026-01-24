@@ -9,15 +9,16 @@ import paho.mqtt.client as mqtt
 
 
 class MyMQTT:
-        """
-        MQTT Client wrapper for IoT communication.
-        
-        Provides:
-        - Connection management (start/stop)
-        - Message publishing with QoS support
-        - Topic subscription with callback notification
-        """    
-        def __init__(self, client_id, broker, port, notifier=None):
+    """
+    MQTT Client wrapper for IoT communication.
+    
+    Provides:
+    - Connection management (start/stop)
+    - Message publishing with QoS support
+    - Topic subscription with callback notification
+    """
+
+    def __init__(self, client_id, broker, port, notifier=None):
         self.client_id = client_id
         self.broker = broker
         self.port = port
