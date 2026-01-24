@@ -1,22 +1,23 @@
 """
-Catalogue Service - Central Device and Service Registry
+MQTT Client Wrapper
 
-This is the core registry for the Smart Irrigation System.
-All devices and services bootstrap from this Catalogue.
-
-Features:
-- Full CRUD operations for devices (GET/POST/PUT/DELETE)
-- Dynamic device ID generation
-- Multi-garden support with field configurations
-- Service registration and discovery
-- Persistent storage in JSON config file
+Provides a simplified interface for MQTT communication using paho-mqtt.
+Handles connection, publishing, and subscribing with optional callbacks.
 """
 
 import paho.mqtt.client as mqtt
 
 
 class MyMQTT:
-    def __init__(self, client_id, broker, port, notifier=None):
+        """
+        MQTT Client wrapper for IoT communication.
+        
+        Provides:
+        - Connection management (start/stop)
+        - Message publishing with QoS support
+        - Topic subscription with callback notification
+        """    
+        def __init__(self, client_id, broker, port, notifier=None):
         self.client_id = client_id
         self.broker = broker
         self.port = port
