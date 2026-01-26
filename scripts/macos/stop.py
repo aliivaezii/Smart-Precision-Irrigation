@@ -15,7 +15,6 @@ Usage:
 import subprocess
 import sys
 
-# Service script names to look for
 SERVICE_PATTERNS = [
     "catalogue/service.py",
     "weather_check/service.py",
@@ -81,7 +80,6 @@ def stop_processes(processes, force=False):
     print("-" * 60)
     
     for pid, cmd in processes:
-        # Extract script name for cleaner display
         for pattern in SERVICE_PATTERNS:
             if pattern in cmd:
                 print(f"  PID {pid}: {pattern}")
