@@ -11,7 +11,7 @@ The actuator:
 4. Executes valve OPEN/CLOSE commands
 5. Tracks and publishes water consumption
 """
-
+import sys
 import time
 import json
 from base_device import BaseActuator
@@ -25,23 +25,19 @@ class ActuatorNode(BaseActuator):
     water consumption tracking.
     """
     
-    # Default flow rate (can be overridden by Catalogue config)
     DEFAULT_FLOW_RATE = 20.0  # Liters per minute
     
     def __init__(self, catalogue_url, garden_id='garden_1', field_id='field_1'):
         """Initialize the valve actuator."""
-        # Call parent init (registers with Catalogue, gets ID, starts MQTT)
+ 
         super().__init__(catalogue_url, garden_id=garden_id, field_id=field_id)
         
-        # Valve state
         self.is_open = False
         self.last_command_time = None
         self.current_duration = 0
         
-        # Get field-specific config for flow rate from garden config
         self.flow_rate = self.field_config.get('flow_rate_lpm', self.DEFAULT_FLOW_RATE)
         
-        # Get resource monitoring topic
         topics_config = self.config.get('topics', {})
         self.topic_resource = topics_config.get('resource_usage', 'smart_irrigation/irrigation/usage')
         
@@ -79,7 +75,6 @@ class ActuatorNode(BaseActuator):
             print(f"[{self.device_id}] Duration: {duration} seconds")
         print("=" * 50)
         
-        # Publish status
         self.publish_status({
             'valve_status': 'OPEN',
             'duration': duration
@@ -93,7 +88,6 @@ class ActuatorNode(BaseActuator):
         
         self.is_open = False
         
-        # Calculate duration and water consumption
         actual_duration = 0
         if self.last_command_time:
             actual_duration = time.time() - self.last_command_time
@@ -107,13 +101,11 @@ class ActuatorNode(BaseActuator):
         print(f"[{self.device_id}] Water used: {water_liters:.2f} liters")
         print("=" * 50)
         
-        # Publish status
         self.publish_status({
             'valve_status': 'CLOSED',
             'duration': actual_duration
         })
         
-        # Publish resource usage for ThingSpeak
         self.publish_resource_usage(water_liters, actual_duration)
 
     def publish_resource_usage(self, water_liters, duration):
@@ -150,11 +142,7 @@ class ActuatorNode(BaseActuator):
 
 
 if __name__ == '__main__':
-    import sys
-    
     catalogue_url = 'http://localhost:8080/'
-    
-    # Default values - can be overridden by command line arguments
     garden_id = 'garden_1'
     field_id = 'field_1'
     
@@ -164,8 +152,6 @@ if __name__ == '__main__':
         field_id = sys.argv[2]
     
     print(f"Starting actuator for {garden_id}/{field_id}...")
-    
-    # Create actuator - ID is assigned dynamically by Catalogue
     actuator = ActuatorNode(catalogue_url, garden_id=garden_id, field_id=field_id)
     
     try:
