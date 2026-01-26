@@ -53,10 +53,10 @@ def open_terminal_with_command(title, command, working_dir):
     
     try:
         subprocess.run(["osascript", "-e", applescript], check=True, capture_output=True)
-        print(f"  ✅ {title}")
+        print(f"  {title}")
         return True
     except subprocess.CalledProcessError as e:
-        print(f"  ❌ {title}: {e}")
+        print(f"  {title}: {e}")
         return False
 
 
@@ -86,10 +86,10 @@ def start_services(python_cmd, include_devices=True):
     """Starts all services in separate Terminal windows."""
     print()
     print("=" * 60)
-    print("🌱 Smart Precision Irrigation System")
+    print(" Smart Precision Irrigation System")
     print("=" * 60)
-    print(f"  📂 Project: {PROJECT_ROOT}")
-    print(f"  🐍 Python:  {python_cmd}")
+    print(f"   Project: {PROJECT_ROOT}")
+    print(f"   Python:  {python_cmd}")
     print()
     
     # Start services
@@ -100,7 +100,7 @@ def start_services(python_cmd, include_devices=True):
         full_path = os.path.join(PROJECT_ROOT, script_path)
         
         if not os.path.exists(full_path):
-            print(f"  ⚠️  Not found: {script_path}")
+            print(f"    Not found: {script_path}")
             continue
         
         command = f"{python_cmd} {full_path}"
@@ -117,7 +117,7 @@ def start_services(python_cmd, include_devices=True):
         full_path = os.path.join(PROJECT_ROOT, script_path)
         
         if not os.path.exists(full_path):
-            print(f"  ⚠️  Not found: {script_path}")
+            print(f"    Not found: {script_path}")
         else:
             args_str = " ".join(args) if args else ""
             command = f"{python_cmd} {full_path} {args_str}".strip()
@@ -126,14 +126,14 @@ def start_services(python_cmd, include_devices=True):
     
     print()
     print("=" * 60)
-    print("✅ System Started")
+    print(" System Started")
     print()
-    print("  📋 Endpoints:")
+    print("    Endpoints:")
     print("     Catalogue:  http://localhost:8080")
     print("     Devices:    http://localhost:8080/devices")
     print("     Gardens:    http://localhost:8080/gardens")
     print()
-    print("  💡 Tips:")
+    print("    Tips:")
     print("     • The Device Simulator auto-discovers registered devices")
     print("     • POST new devices to /devices - they start automatically!")
     print("     • Run 'python scripts/macos/stop.py' to stop all")
