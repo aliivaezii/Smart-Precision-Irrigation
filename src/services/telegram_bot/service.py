@@ -9,17 +9,14 @@ Simplified version that:
 
 import sys
 import os
-sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..', 'common'))
-
 import telepot
 from telepot.loop import MessageLoop
 from telepot.namedtuple import InlineKeyboardMarkup, InlineKeyboardButton
-
 from MyMQTT import MyMQTT
 import time
 import requests
 import json
-
+sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..', 'common'))
 
 class TelegramBot:
     """
@@ -30,14 +27,12 @@ class TelegramBot:
     - View system status (via Status Service REST API)
     """
     
-    # URL of the Status Service
     STATUS_SERVICE_URL = "http://localhost:9090"
 
     def __init__(self, catalogue_url):
         self.catalogue_url = catalogue_url
         self.alert_subscribers = []
 
-        # 1. Bootstrap: Get config from Catalogue
         print(f"[TelegramBot] Fetching config from {catalogue_url}...")
         res = requests.get(catalogue_url)
         data = res.json()
@@ -45,12 +40,10 @@ class TelegramBot:
         self.broker = data['broker']['address']
         self.port = data['broker']['port']
         
-        # Get alert topics from Catalogue
         topics_config = data.get('topics', {})
         self.topic_weather_alert = topics_config.get('weather_alert', 'smart_irrigation/weather/alert')
         self.topic_frost_alert = topics_config.get('frost_alert', 'smart_irrigation/weather/frost')
         
-        # Telegram settings
         telegram_config = data.get('telegram', {})
         self.token = telegram_config.get('token', '')
         self.chat_ids = telegram_config.get('chat_ids', [])
@@ -62,7 +55,6 @@ class TelegramBot:
         print(f"[TelegramBot] Weather alert topic: {self.topic_weather_alert}")
         print(f"[TelegramBot] Frost alert topic: {self.topic_frost_alert}")
         
-        # 2. Setup Telegram Bot
         self.bot = telepot.Bot(self.token)
         callback_handlers = {
             'chat': self.on_chat_message,
@@ -70,12 +62,10 @@ class TelegramBot:
         }
         MessageLoop(self.bot, callback_handlers).run_as_thread()
         
-        # 3. Start MQTT (only for alerts)
         self.client = MyMQTT('telegram_bot', self.broker, self.port, notifier=self)
         self.client.start()
         time.sleep(1)
-        
-        # 4. Subscribe to alert topics only
+    
         self.setup_subscriptions()
 
     def setup_subscriptions(self):
@@ -93,7 +83,6 @@ class TelegramBot:
         if chat_id not in self.chat_ids:
             self.chat_ids.append(chat_id)
         
-        # Handle /start command
         if content_type == 'text':
             if msg['text'] == '/start':
                 self.send_main_menu(chat_id)
@@ -112,12 +101,10 @@ class TelegramBot:
         """Handle button callbacks."""
         query_id, from_id, query_data = telepot.glance(msg, flavor='callback_query')
         
-        # Handle main menu button
         if query_data == 'main_menu':
             self.send_main_menu(from_id)
             return
         
-        # Handle subscribe to alerts
         if query_data == 'subscribe_alerts':
             if from_id not in self.alert_subscribers:
                 self.alert_subscribers.append(from_id)
@@ -127,7 +114,6 @@ class TelegramBot:
                 self.bot.answerCallbackQuery(query_id, text="Already subscribed.")
             return
         
-        # Handle view status
         if query_data == 'view_status':
             self.bot.answerCallbackQuery(query_id, text="Fetching status...")
             self.show_system_status(from_id)
@@ -135,7 +121,7 @@ class TelegramBot:
 
     def show_system_status(self, chat_id):
         """Fetch status from Status Service and display it."""
-        # Get status from Status Service
+        
         response = requests.get(self.STATUS_SERVICE_URL, timeout=5)
         
         if response.status_code != 200:
@@ -173,7 +159,6 @@ class TelegramBot:
             if isinstance(payload, list):
                 for item in payload:
                     name = item.get('n', '')
-                    # SenML value fields: 'v' (numeric), 'vs' (string), 'vb' (boolean)
                     if 'v' in item:
                         value = item['v']
                     elif 'vs' in item:
@@ -186,7 +171,6 @@ class TelegramBot:
                     if line:
                         lines.append(line)
         
-        # Add refresh button
         keyboard = InlineKeyboardMarkup(inline_keyboard=[
             [InlineKeyboardButton(text='🔄 Refresh', callback_data='view_status')],
             [InlineKeyboardButton(text='⬅️ Back', callback_data='main_menu')]
