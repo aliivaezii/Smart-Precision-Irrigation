@@ -143,10 +143,10 @@ The system uses **two primary communication methods**:
 
 | Criterion | REST | MQTT |
 |-----------|------|------|
-| **Configuration/Bootstrap** | ✅ Request-Response pattern | ❌ Not suitable |
-| **Real-time Sensor Data** | ❌ Polling overhead | ✅ Pub/Sub efficiency |
-| **Commands to Actuators** | ❌ Requires polling | ✅ Instant delivery |
-| **External Cloud APIs** | ✅ Standard HTTP | ❌ Not supported |
+| **Configuration/Bootstrap** |  Request-Response pattern |  Not suitable |
+| **Real-time Sensor Data** |  Polling overhead |  Pub/Sub efficiency |
+| **Commands to Actuators** |  Requires polling |  Instant delivery |
+| **External Cloud APIs** |  Standard HTTP |  Not supported |
 
 ### 3.3 MQTT Quality of Service (QoS)
 
@@ -751,7 +751,7 @@ topics = {
 }
 ```
 
-> **✅ Auto-Discovery**: The Device Simulator automatically detects new devices! After POST registration, the simulator will discover and start simulating the new device within 60 seconds - no manual process startup required.
+> ** Auto-Discovery**: The Device Simulator automatically detects new devices! After POST registration, the simulator will discover and start simulating the new device within 60 seconds - no manual process startup required.
 >
 > **Alternative (Manual Mode)**: If you prefer to run individual device processes manually:
 > ```bash
@@ -799,64 +799,56 @@ topics = {
 
 #### `src/services/water_manager/service.py`
 
-**Purpose**: Core irrigation controller — the "brain" of the system with smart irrigation logic.
+**Purpose**: Core irrigation controller — the "brain" of the system.
 
 **Key Features**:
-- **Auto-Discovery**: Automatically discovers new devices from Catalogue
+- **Auto-Discovery**: Automatically discovers new devices from Catalogue every 60 seconds
 - **Multi-Garden Support**: Manages irrigation across multiple gardens/fields
-- **Dynamic Subscriptions**: Subscribes to new sensors as they register
+- **Weather-Aware**: Skips irrigation during rain/frost alerts
+- **Crop-Based Durations**: Uses lookup table for irrigation duration by crop type
 
 **Responsibilities**:
-1. Poll Catalogue for registered devices (every 60 seconds)
-2. Auto-subscribe to all sensor data topics
+1. Load devices from Catalogue (with periodic refresh)
+2. Subscribe to sensor data and weather alert topics
 3. Evaluate soil moisture against threshold
 4. Check for active rain AND frost alerts
-5. Calculate irrigation duration based on crop type and field size
-6. Publish valve open/close commands with calculated duration
+5. Trigger irrigation with crop-specific duration
 
 **Auto-Discovery Logic**:
 ```python
-def _refresh_devices(self):
-    """Polls Catalogue every 60 seconds for new devices"""
-    while self.running:
-        try:
-            response = requests.get(f"{self.catalogue_url}/devices")
-            new_devices = response.json()
-            
-            # Find newly registered sensors
-            new_sensor_ids = set(d['id'] for d in new_devices if d['type'] == 'sensor')
-            current_sensor_ids = set(d['id'] for d in self.devices if d['type'] == 'sensor')
-            
-            if new_sensor_ids != current_sensor_ids:
-                self.devices = new_devices
-                self._subscribe_to_sensors()  # Subscribe to new topics
-                
-        except Exception as e:
-            print(f"Device refresh error: {e}")
-        
-        time.sleep(60)  # Check every 60 seconds
+def _start_auto_discovery(self):
+    """Refresh devices every 60 seconds."""
+    def loop():
+        while True:
+            time.sleep(60)
+            old_count = len(self.sensors)
+            self._load_devices()
+            if len(self.sensors) > old_count:
+                self._subscribe_sensors()
+    
+    threading.Thread(target=loop, daemon=True).start()
 ```
 
-**Smart Irrigation Logic**:
+**Irrigation Logic**:
 ```python
-# Crop factors (water demand multipliers)
-CROP_FACTORS = {
-    'tomato': 1.2,    # High water demand
-    'lettuce': 0.8,   # Low water demand
-    'wheat': 0.6,     # Lower water demand
-    'corn': 1.0       # Medium water demand
+# Crop-based duration lookup (seconds)
+DURATIONS = {
+    'tomato': 600,   # 10 min
+    'corn': 480,     # 8 min
+    'lettuce': 300,  # 5 min
+    'wheat': 240,    # 4 min
 }
+DEFAULT_DURATION = 300  # 5 min fallback
 
-# Calculation formula
-water_needed_mm = (TARGET_MOISTURE - current_moisture) * crop_factor
-total_liters = water_needed_mm * field_size_m2
-duration_sec = total_liters / (flow_rate_lpm / 60)
+def _get_duration(self, garden_id, field_id):
+    crop = self.gardens[garden_id]['fields'][field_id].get('crop_type', '')
+    return self.DURATIONS.get(crop, self.DEFAULT_DURATION)
 ```
 
 **Decision Logic**:
 ```
 IF moisture < threshold AND NOT rain_alert AND NOT frost_alert THEN
-    duration = calculate_irrigation_duration(field_id, moisture)
+    duration = _get_duration(garden_id, field_id)
     OPEN valve for {duration} seconds
 ELSE IF moisture < threshold AND (rain_alert OR frost_alert) THEN
     SKIP irrigation (weather alert active)
@@ -1152,79 +1144,61 @@ As shown in the diagram, the **Control Strategy** is integrated within the **Wat
    - Crop type and field configuration
 4. Sends valve commands (MQTT publisher)
 
-### 6.5 Design vs Implementation Verification
-
-The architecture diagram has been updated and now **fully matches the implementation**:
-
-| Component | Diagram | Implementation | Status |
-|-----------|---------|----------------|--------|
-| **Telegram Bot (2)** | MQTT Sub (2) + REST Consumer | ✅ Same | ✅ Match |
-| **Actuators (1,2)** | MQTT Pub/Sub (1,2) + REST Consumer | ✅ Same | ✅ Match |
-| **Sensors (1)** | MQTT Publisher (1) + REST Consumer | ✅ Same | ✅ Match |
-| **Status Service (2)** | REST Provider (●) + MQTT Sub (2) | ✅ Same | ✅ Match |
-| **Weather Check (1)** | MQTT Publisher (1) + REST Consumer | ✅ Same | ✅ Match |
-| **ThingSpeak Adaptor (2)** | MQTT Subscriber (2) + REST Consumer | ✅ Same | ✅ Match |
-| **Water Manager (1,2)** | MQTT Pub/Sub (1,2) + REST Consumer | ✅ Same | ✅ Match |
-| **Catalogue** | REST Provider (●) only | ✅ Same | ✅ Match |
-
-**All components verified ✅** - The diagram accurately represents the system architecture.
-
 ---
 
 ## 7. Smart Irrigation Logic
 
 ### 7.1 Overview
 
-The Water Manager implements smart irrigation based on crop type and field configuration, replacing the previous hardcoded 5-minute duration.
+The Water Manager triggers irrigation when soil moisture falls below the configured threshold (default: 30%). Irrigation duration is determined by crop type using a lookup table.
 
-### 7.2 Crop Factors
+### 7.2 Decision Logic
 
-| Crop | Factor | Water Demand |
-|------|--------|--------------|
-| Tomato | 1.2 | High |
-| Corn | 1.0 | Medium |
-| Lettuce | 0.8 | Low |
-| Wheat | 0.6 | Lower |
-
-### 7.3 Calculation Formula
-
-```python
-TARGET_MOISTURE = 70.0  # Target soil moisture percentage
-
-def calculate_irrigation_duration(field_id, current_moisture):
-    # Get field config from Catalogue
-    crop_type = field_config.get('crop_type', 'default')
-    field_size = field_config.get('field_size_m2', 100)
-    flow_rate_lpm = field_config.get('flow_rate_lpm', 20.0)
-    
-    # Get crop factor
-    crop_factor = CROP_FACTORS.get(crop_type, 1.0)
-    
-    # Calculate moisture deficit
-    moisture_deficit = max(0, TARGET_MOISTURE - current_moisture)
-    
-    # Calculate water needed (mm * m² = liters)
-    water_needed_mm = moisture_deficit * crop_factor
-    total_liters = water_needed_mm * field_size
-    
-    # Calculate duration (liters / flow rate)
-    flow_rate_lps = flow_rate_lpm / 60.0
-    duration_seconds = total_liters / flow_rate_lps
-    
-    # Clamp to range (min 60s, max 30 min)
-    return max(60, min(1800, duration_seconds))
+```
+IF moisture < threshold AND NOT rain_alert AND NOT frost_alert THEN
+    duration = DURATIONS[crop_type]  # Lookup by crop
+    OPEN valve for {duration} seconds
+ELSE IF moisture < threshold AND (rain_alert OR frost_alert) THEN
+    SKIP irrigation (weather alert active)
+ELSE
+    No action needed (moisture OK)
 ```
 
-### 7.4 Fallback Lookup Table
+### 7.3 Crop-Based Durations
 
-If field configuration is missing, a simple lookup table is used:
+| Crop | Duration | Description |
+|------|----------|-------------|
+| Tomato | 600s (10 min) | High water demand |
+| Corn | 480s (8 min) | Medium water demand |
+| Lettuce | 300s (5 min) | Low water demand |
+| Wheat | 240s (4 min) | Lower water demand |
+| Default | 300s (5 min) | Fallback for unknown crops |
 
-| Crop | Duration |
-|------|----------|
-| Tomato | 600s (10 min) |
-| Corn | 480s (8 min) |
-| Lettuce | 300s (5 min) |
-| Wheat | 240s (4 min) |
+### 7.4 Implementation
+
+```python
+# Crop-based duration lookup (seconds)
+DURATIONS = {
+    'tomato': 600,   # 10 min
+    'corn': 480,     # 8 min
+    'lettuce': 300,  # 5 min
+    'wheat': 240,    # 4 min
+}
+DEFAULT_DURATION = 300  # 5 min fallback
+
+def _get_duration(self, garden_id, field_id):
+    """Get irrigation duration based on crop type."""
+    try:
+        crop = self.gardens[garden_id]['fields'][field_id].get('crop_type', '')
+        return self.DURATIONS.get(crop, self.DEFAULT_DURATION)
+    except KeyError:
+        return self.DEFAULT_DURATION
+```
+
+### 7.5 Weather-Aware Behavior
+
+- **Rain Alert**: Irrigation skipped if rain > 5mm is predicted
+- **Frost Alert**: Irrigation skipped if temperature < 2°C is forecast
 
 ---
 
@@ -2018,7 +1992,3 @@ The combination of REST and MQTT protocols provides the ideal balance between:
 *Document Version: 2.2*  
 *Last Updated: January 2026*  
 *System Version: 2.2*
-
-
-
-
