@@ -1,8 +1,7 @@
 """
 Actuator Node - Solenoid Valve Controller
 
-This actuator extends BaseActuator to control solenoid valves
-in a gravity-fed irrigation system.
+This actuator extends BaseActuator to control solenoid valves.
 
 The actuator:
 1. Self-registers with Catalogue (ID assigned dynamically)
@@ -19,7 +18,7 @@ from base_device import BaseActuator
 
 class ActuatorNode(BaseActuator):
     """
-    Solenoid Valve Controller for Gravity-Fed Irrigation.
+    Solenoid Valve Controller.
     
     Extends BaseActuator with valve control logic and
     water consumption tracking.
