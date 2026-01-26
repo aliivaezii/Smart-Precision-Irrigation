@@ -1,4 +1,4 @@
-# Smart Precision Irrigation System 2.2 🌱💧
+# Smart Precision Irrigation System 2.2 
 
 ![Python](https://img.shields.io/badge/Python-3.11%2B-blue?style=for-the-badge&logo=python)
 ![Platform](https://img.shields.io/badge/Platform-Raspberry%20Pi-red?style=for-the-badge&logo=raspberrypi)
@@ -24,7 +24,7 @@ Unlike traditional timer-based systems, this platform employs a **Microservices 
 
 ---
 
-## 🏗 System Architecture
+## System Architecture
 The software strictly follows **Object-Oriented Programming (OOP)** principles and uses **SenML** message format for all MQTT communications.
 
 ### 1. The Edge Layer (Sensors & Actuators)
@@ -43,7 +43,7 @@ Running on a **Raspberry Pi 5** Gateway, communicating via **MQTT** and **REST**
 
 ---
 
-## 🏛️ Device Architecture
+## Device Architecture
 
 The system uses **Object-Oriented inheritance** to avoid code duplication between sensors and actuators:
 
@@ -67,7 +67,7 @@ BaseDevice (common logic: self-registration, bootstrap, heartbeat, MQTT)
 
 ---
 
-## 📡 Device Registration
+## Device Registration
 
 Devices **self-register** with the Catalogue and receive dynamically assigned IDs:
 
@@ -120,9 +120,9 @@ You can register new devices manually using **Postman** or any REST client. The 
 ### JSON Fields:
 | Field | Required | Description |
 |-------|----------|-------------|
-| `type` | ✅ Yes | `"sensor"` or `"actuator"` |
-| `garden_id` | ✅ Yes | Garden identifier (e.g., `"garden_1"`) |
-| `field_id` | ✅ Yes | Field identifier (e.g., `"field_1"`) |
+| `type` | Yes | `"sensor"` or `"actuator"` |
+| `garden_id` | Yes | Garden identifier (e.g., `"garden_1"`) |
+| `field_id` | Yes | Field identifier (e.g., `"field_1"`) |
 | `name` | No | Human-readable name |
 
 ### Expected Response:
@@ -141,7 +141,7 @@ You can register new devices manually using **Postman** or any REST client. The 
 
 > **Note**: The Catalogue generates a unique ID and MQTT topics automatically. The Water Manager auto-discovers new devices every 60 seconds.
 
-### 🤖 Auto-Simulation with Device Simulator
+### Auto-Simulation with Device Simulator
 
 The **Device Simulator** automatically discovers and simulates ALL registered devices. No need to manually run individual device scripts!
 
@@ -179,7 +179,7 @@ python src/devices/actuator_node.py garden_1 field_3
 
 ---
 
-## 🏡 Multiple Gardens Support
+## Multiple Gardens Support
 
 The system supports multiple gardens, each with their own fields and crop configurations:
 
@@ -224,7 +224,7 @@ The system supports multiple gardens, each with their own fields and crop config
 
 ---
 
-## 📊 SenML Message Format
+## SenML Message Format
 
 All MQTT messages follow the course-standard SenML format:
 
@@ -253,7 +253,7 @@ All MQTT messages follow the course-standard SenML format:
 
 ---
 
-## 🧠 Smart Irrigation Logic
+## Smart Irrigation Logic
 
 The Water Manager calculates irrigation duration dynamically:
 
@@ -273,7 +273,7 @@ duration_sec = total_liters / (flow_rate_lpm / 60)
 
 ---
 
-## 💧 Resource Tracking
+## Resource Tracking
 
 When an actuator closes its valve, it publishes resource usage:
 
@@ -296,7 +296,7 @@ When an actuator closes its valve, it publishes resource usage:
 
 ---
 
-## 🛠 Hardware Stack
+## Hardware Stack
 | Device | Quantity | Function |
 | :--- | :--- | :--- |
 | **Raspberry Pi 5** | 1 | Central Gateway & Microservices Host |
@@ -308,7 +308,7 @@ When an actuator closes its valve, it publishes resource usage:
 
 ---
 
-## 🚀 Installation & Setup
+## Installation & Setup
 
 ### Prerequisites
 * Python 3.9 or higher
@@ -335,7 +335,7 @@ pip install -r requirements.txt
 
 ### 4. Start the System
 
-#### 🚀 Quick Start (Recommended)
+#### Quick Start (Recommended)
 Use the automated launcher scripts to start all services in separate terminals:
 
 ```
@@ -369,7 +369,7 @@ python scripts\windows\start.py --powershell # Use PowerShell instead of cmd
 | Startup Delays | Waits between services for proper initialization |
 | Named Windows | Each terminal has a descriptive title |
 
-#### 🛑 Stop the System
+#### Stop the System
 **macOS:**
 ```bash
 python scripts/macos/stop.py         # Stop all services (with confirmation)
@@ -382,7 +382,7 @@ python scripts\windows\stop.py         # Stop all services (with confirmation)
 python scripts\windows\stop.py --force # Stop without confirmation
 ```
 
-#### 📋 Manual Start (Alternative)
+#### Manual Start (Alternative)
 If you prefer to start services manually in separate terminals:
 
 ```bash
