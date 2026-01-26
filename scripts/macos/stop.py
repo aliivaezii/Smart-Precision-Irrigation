@@ -68,13 +68,13 @@ def stop_processes(processes, force=False):
     """
     if not processes:
         print()
-        print("✅ No Smart Irrigation services are currently running.")
+        print("  No Smart Irrigation services are currently running.")
         print()
         return
     
     print()
     print("=" * 60)
-    print("🌱 Smart Precision Irrigation System - Stop")
+    print(" Smart Precision Irrigation System - Stop")
     print("=" * 60)
     print()
     print(f"Found {len(processes)} running service(s):")
@@ -116,9 +116,9 @@ def stop_processes(processes, force=False):
     print()
     print("=" * 60)
     if stopped > 0:
-        print(f"✅ Stopped {stopped} service(s)")
+        print(f" Stopped {stopped} service(s)")
     if failed > 0:
-        print(f"❌ Failed to stop {failed} service(s)")
+        print(f" Failed to stop {failed} service(s)")
     print("=" * 60)
     print()
 
