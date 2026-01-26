@@ -13,13 +13,14 @@ instead of subscribing to all topics themselves.
 
 import sys
 import os
+sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..', 'common'))
 from MyMQTT import MyMQTT
 import json
 import time
 import requests
 import threading
 import cherrypy
-sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..', 'common'))
+
 
 class StatusService:
     """
