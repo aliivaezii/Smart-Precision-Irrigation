@@ -18,13 +18,14 @@ This is the RECOMMENDED way to run device simulations for testing.
 
 import sys
 import os
+sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'common'))
 from MyMQTT import MyMQTT
 import time
 import requests
 import json
 import random
 import threading
-sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'common'))
+
 
 CATALOGUE_URL = "http://localhost:8080/"
 SENSOR_PUBLISH_INTERVAL = 10  # seconds between sensor readings
