@@ -23,23 +23,19 @@ class WeatherCheck:
     API_URL = "https://api.open-meteo.com/v1/forecast"
     
     def __init__(self, catalogue_url):
-        # 1. Bootstrap: Get config from Catalogue
         print(f"[Weather] Fetching config from {catalogue_url}...")
         res = requests.get(catalogue_url)
         data = res.json()
         
-        # Get broker info
         self.broker = data['broker']['address']
         self.port = data['broker']['port']
         
-        # Get location settings
         settings = data.get('settings', {})
         self.lat = settings.get('lat', 45.06)
         self.lon = settings.get('lon', 7.66)
         self.rain_threshold = settings.get('rain_threshold_mm', 5.0)
         self.frost_threshold = settings.get('frost_threshold_c', 2.0)
         
-        # Get MQTT topics from config (NO HARDCODING!)
         topics = data.get('topics', {})
         self.topic_weather_alert = topics.get('weather_alert', 'smart_irrigation/weather/alert')
         self.topic_frost_alert = topics.get('frost_alert', 'smart_irrigation/weather/frost')
@@ -49,12 +45,10 @@ class WeatherCheck:
         print(f"[Weather] Frost threshold: {self.frost_threshold}°C")
         print(f"[Weather] Topics: rain={self.topic_weather_alert}, frost={self.topic_frost_alert}")
         
-        # 2. Start MQTT
         self.client = MyMQTT('weather_service', self.broker, self.port)
         self.client.start()
         time.sleep(1)
         
-        # Alert state flags
         self.rain_alert_active = False
         self.frost_alert_active = False
         self.running = False
@@ -75,20 +69,21 @@ class WeatherCheck:
             res = requests.get(self.API_URL, params=params, timeout=10)
             data = res.json()
             
-            # Get precipitation data
             precipitation = data.get('hourly', {}).get('precipitation', [])
             total_rain = sum(p for p in precipitation if p)
             
-            # Get temperature data
             temperatures = data.get('hourly', {}).get('temperature_2m', [])
-            min_temp = min(temperatures) if temperatures else 10.0
+            if temperatures:
+                min_temp = min(temperatures)
+            else:
+                min_temp = 10.0
             
             print(f"[Weather] Forecast: {total_rain:.1f}mm rain, min temp: {min_temp:.1f}°C")
             return total_rain, min_temp
             
         except Exception as e:
             print(f"[Weather] API error: {e}")
-            return 0, 10.0  # Safe defaults
+            return 0, 10.0 
 
     def publish_rain_alert(self, rain_mm):
         """Publish rain alert if threshold exceeded."""
@@ -131,7 +126,7 @@ class WeatherCheck:
             }
             self.client.publish(self.topic_frost_alert, json.dumps(msg), qos=1)
             self.frost_alert_active = True
-            print(f"[Weather] ❄️ FROST ALERT sent! (min temp: {min_temp:.1f}°C)")
+            print(f"[Weather] FROST ALERT sent! (min temp: {min_temp:.1f}°C)")
             
         elif min_temp > self.frost_threshold and self.frost_alert_active:
             # Send FROST_ALERT - CLEARED
@@ -149,10 +144,9 @@ class WeatherCheck:
     def _poll_loop(self, interval):
         """Background thread that polls weather."""
         while self.running:
-            # Get weather data
+
             rain_mm, min_temp = self.check_weather()
             
-            # Check and publish alerts
             self.publish_rain_alert(rain_mm)
             self.publish_frost_alert(min_temp)
             
@@ -162,14 +156,12 @@ class WeatherCheck:
         """Start background polling thread."""
         self.running = True
         
-        # Start polling thread
         thread = threading.Thread(target=self._poll_loop, args=(interval,))
         thread.daemon = True
         thread.start()
         
         print(f"[Weather] Running... checking every {interval}s")
         
-        # Keep main thread alive
         while self.running:
             time.sleep(1)
 
