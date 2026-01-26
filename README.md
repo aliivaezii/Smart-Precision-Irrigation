@@ -5,7 +5,7 @@
 ![Architecture](https://img.shields.io/badge/Architecture-Microservices-orange?style=for-the-badge)
 ![License](https://img.shields.io/badge/License-MIT-green?style=for-the-badge)
 
-## 📖 Project Overview
+## Project Overview
 The **Smart Precision Irrigation System** is an IoT-based platform designed to optimize agricultural water usage and prevent crop loss due to climate anomalies.
 
 Unlike traditional timer-based systems, this platform employs a **Microservices Architecture** to make real-time decisions based on soil moisture data, local temperature, and external weather forecasts.
