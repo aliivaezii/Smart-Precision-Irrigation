@@ -262,7 +262,6 @@ class CatalogueService:
                     print(f"[Catalogue] Service '{service_id}' updated")
                     return {"status": "updated", "id": service_id}
             
-            # New service
             new_service = {
                 "id": payload.get("id"),
                 "name": payload.get("name", "Unknown Service"),
@@ -368,10 +367,8 @@ class CatalogueService:
 
 
 if __name__ == "__main__":
-    # Find config file path
     base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
     config_path = os.path.join(base_dir, "config", "system_config.json")
-
     conf = {
         "/": {
             "request.dispatch": cherrypy.dispatch.MethodDispatcher(),
