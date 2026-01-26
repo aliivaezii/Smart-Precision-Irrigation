@@ -22,12 +22,9 @@ import time
 import os
 import sys
 
-# Get the project root directory (two levels up from this script)
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 PROJECT_ROOT = os.path.abspath(os.path.join(SCRIPT_DIR, "..", ".."))
 
-# Service definitions with startup order and delays
-# Format: (name, relative_path, delay_after_start)
 SERVICES = [
     ("Catalogue Service", "src/services/catalogue/service.py", 3),
     ("Status Service", "src/services/status/service.py", 1),
@@ -37,7 +34,6 @@ SERVICES = [
     ("ThingSpeak Adaptor", "src/services/thingspeak_adaptor/service.py", 1),
 ]
 
-# Device simulator (auto-discovers all registered devices)
 DEVICE_SIMULATOR = ("Device Simulator", "src/devices/device_simulator.py", [], 1)
 
 
@@ -62,17 +58,14 @@ def open_terminal_with_command(title, command, working_dir):
 
 def get_python_command():
     """Determines the correct Python command to use."""
-    # Check for .venv (standard naming)
     venv_path = os.path.join(PROJECT_ROOT, ".venv", "bin", "python")
     if os.path.exists(venv_path):
         return venv_path
     
-    # Check for venv (alternative naming)
     venv_path_alt = os.path.join(PROJECT_ROOT, "venv", "bin", "python")
     if os.path.exists(venv_path_alt):
         return venv_path_alt
     
-    # Check for python3
     try:
         subprocess.run(["python3", "--version"], capture_output=True, check=True)
         return "python3"
@@ -80,7 +73,6 @@ def get_python_command():
         pass
     
     return "python"
-
 
 def start_services(python_cmd, include_devices=True):
     """Starts all services in separate Terminal windows."""
@@ -91,8 +83,6 @@ def start_services(python_cmd, include_devices=True):
     print(f"   Project: {PROJECT_ROOT}")
     print(f"   Python:  {python_cmd}")
     print()
-    
-    # Start services
     print("Starting Services...")
     print("-" * 40)
     
@@ -107,7 +97,6 @@ def start_services(python_cmd, include_devices=True):
         if open_terminal_with_command(name, command, PROJECT_ROOT):
             time.sleep(delay)
     
-    # Start devices if requested
     if include_devices:
         print()
         print("Starting Device Simulator...")
@@ -141,8 +130,6 @@ def start_services(python_cmd, include_devices=True):
     print()
 
 
-
-
 def main():
     """
     Main function - starts all services.
@@ -151,21 +138,18 @@ def main():
         python scripts/macos/start.py              # Start all services + devices
         python scripts/macos/start.py --no-devices # Start services only
     """
-    # Check platform
+
     if sys.platform != "darwin":
         print("This script is for macOS only.")
         print("For Windows: python scripts/windows/start.py")
         sys.exit(1)
-    
-    # Check for --no-devices flag
+
     include_devices = True
     if len(sys.argv) > 1 and sys.argv[1] == "--no-devices":
         include_devices = False
     
-    # Determine Python command
     python_cmd = get_python_command()
     
-    # Start the system
     start_services(python_cmd, include_devices=include_devices)
 
 
