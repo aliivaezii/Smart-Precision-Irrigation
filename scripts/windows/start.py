@@ -23,12 +23,9 @@ import time
 import os
 import sys
 
-# Get the project root directory (two levels up from this script)
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 PROJECT_ROOT = os.path.abspath(os.path.join(SCRIPT_DIR, "..", ".."))
 
-# Service definitions with startup order and delays
-# Format: (name, relative_path, delay_after_start)
 SERVICES = [
     ("Catalogue Service", "src/services/catalogue/service.py", 3),
     ("Status Service", "src/services/status/service.py", 1),
@@ -38,7 +35,6 @@ SERVICES = [
     ("ThingSpeak Adaptor", "src/services/thingspeak_adaptor/service.py", 1),
 ]
 
-# Device simulator (auto-discovers all registered devices)
 DEVICE_SIMULATOR = ("Device Simulator", "src/devices/device_simulator.py", [], 1)
 
 
@@ -69,24 +65,22 @@ def open_powershell_with_command(title, command, working_dir):
 
 def get_python_command():
     """Determines the correct Python command to use."""
-    # Check for .venv (standard naming)
+    
     venv_path = os.path.join(PROJECT_ROOT, ".venv", "Scripts", "python.exe")
     if os.path.exists(venv_path):
         return f'"{venv_path}"'
     
-    # Check for venv (alternative naming)
     venv_path_alt = os.path.join(PROJECT_ROOT, "venv", "Scripts", "python.exe")
     if os.path.exists(venv_path_alt):
         return f'"{venv_path_alt}"'
     
-    # Check for python
+
     try:
         subprocess.run(["python", "--version"], capture_output=True, check=True)
         return "python"
     except (subprocess.CalledProcessError, FileNotFoundError):
         pass
     
-    # Check for py launcher
     try:
         subprocess.run(["py", "--version"], capture_output=True, check=True)
         return "py"
@@ -109,8 +103,6 @@ def start_services(python_cmd, include_devices=True, use_powershell=False):
     print(f"   Python:   {python_cmd}")
     print(f"   Terminal: {terminal_type}")
     print()
-    
-    # Start services
     print("Starting Services...")
     print("-" * 40)
     
@@ -125,7 +117,6 @@ def start_services(python_cmd, include_devices=True, use_powershell=False):
         if open_terminal(name, command, PROJECT_ROOT):
             time.sleep(delay)
     
-    # Start devices if requested
     if include_devices:
         print()
         print("Starting Device Simulator...")
@@ -169,13 +160,12 @@ def main():
         python scripts\\windows\\start.py --no-devices # Start services only
         python scripts\\windows\\start.py --powershell # Use PowerShell
     """
-    # Check platform
+    
     if sys.platform != "win32":
         print("This script is for Windows only.")
         print("For macOS: python scripts/macos/start.py")
         sys.exit(1)
     
-    # Check for flags
     include_devices = True
     use_powershell = False
     
@@ -185,10 +175,8 @@ def main():
         elif arg == "--powershell":
             use_powershell = True
     
-    # Determine Python command
     python_cmd = get_python_command()
     
-    # Start the system
     start_services(python_cmd, include_devices=include_devices, use_powershell=use_powershell)
 
 
