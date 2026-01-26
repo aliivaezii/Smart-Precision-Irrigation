@@ -1,11 +1,12 @@
 import sys
 import os
+sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..', 'common'))
 from MyMQTT import MyMQTT
 import time
 import requests
 import json
 import threading
-sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..', 'common'))
+
 
 class WeatherCheck:
     """
