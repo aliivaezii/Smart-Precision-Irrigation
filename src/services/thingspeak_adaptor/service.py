@@ -1,12 +1,10 @@
 import sys
 import os
-sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..', 'common'))
-
 from MyMQTT import MyMQTT
 import time
 import requests
 import json
-
+sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..', 'common'))
 
 class ThingSpeakAdaptor:
     """
@@ -23,7 +21,6 @@ class ThingSpeakAdaptor:
     def __init__(self, catalogue_url):
         self.catalogue_url = catalogue_url
         
-        # 1. Bootstrap: Get config from Catalogue
         print(f"[ThingSpeak] Fetching config from {catalogue_url}...")
         res = requests.get(catalogue_url)
         data = res.json()
@@ -31,13 +28,10 @@ class ThingSpeakAdaptor:
         self.broker = data['broker']['address']
         self.port = data['broker']['port']
         
-        # Get ThingSpeak settings
         thingspeak = data.get('thingspeak', {})
         self.api_key = thingspeak.get('write_api_key', '')
         self.channel_id = thingspeak.get('channel_id', '')
         
-        # Field mapping: data_key -> field number
-        # Note: No energy_kwh - gravity-fed system
         self.field_map = thingspeak.get('field_map', {
             'soil_moisture': 'field1',
             'temperature': 'field2',
@@ -51,14 +45,11 @@ class ThingSpeakAdaptor:
         print(f"[ThingSpeak] Channel: {self.channel_id}")
         print(f"[ThingSpeak] Field mapping: {self.field_map}")
         
-        # Get resource usage topic from config
         topics_config = data.get('topics', {})
         self.topic_resource = topics_config.get('resource_usage', 'smart_irrigation/irrigation/usage')
         
-        # Water needed topic (from Water Manager)
         self.topic_water_needed = "smart_irrigation/farm/field_1/water_needed"
         
-        # Get topic prefix for wildcard subscription
         project_info = data.get('project_info', {})
         self.topic_prefix = project_info.get('topic_prefix', 'smart_irrigation')
         
@@ -68,12 +59,10 @@ class ThingSpeakAdaptor:
         
         print(f"[ThingSpeak] Using wildcard topic: {self.wildcard_topic}")
         
-        # Start MQTT
         self.client = MyMQTT('thingspeak_adaptor', self.broker, self.port, notifier=self)
         self.client.start()
         time.sleep(1)
         
-        # Buffer for rate limiting
         self.last_update = 0
         self.buffer = {}
 
@@ -90,10 +79,8 @@ class ThingSpeakAdaptor:
             if not self.is_field_1_resource(data):
                 return
         
-        # Process the message based on format
+
         self.process_message(data)
-        
-        # Push to ThingSpeak (rate limited)
         self.push_to_cloud()
 
     def is_field_1_resource(self, data):
@@ -156,15 +143,13 @@ class ThingSpeakAdaptor:
 
     def run(self):
         """Subscribe to topics and run forever."""
-        # Subscribe to wildcard topic for all field_1 data
+        
         self.client.subscribe(self.wildcard_topic, qos=0)
         print(f"[ThingSpeak] Subscribed to: {self.wildcard_topic}")
         
-        # Subscribe to resource usage (water consumption)
         self.client.subscribe(self.topic_resource, qos=0)
         print(f"[ThingSpeak] Subscribed to resource: {self.topic_resource}")
         
-        # Subscribe to water_needed from Water Manager
         self.client.subscribe(self.topic_water_needed, qos=0)
         print(f"[ThingSpeak] Subscribed to water_needed: {self.topic_water_needed}")
         
