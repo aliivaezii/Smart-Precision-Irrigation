@@ -34,7 +34,7 @@ class SensorNode(BaseSensor):
         Returns:
             dict: Sensor readings with 'soil_moisture' and 'temperature'
         """
-        # Simulate sensor readings
+        
         moisture = random.uniform(20.0, 80.0)
         temperature = random.uniform(15.0, 35.0)
         
@@ -48,8 +48,6 @@ if __name__ == '__main__':
     import sys
     
     catalogue_url = 'http://localhost:8080/'
-    
-    # Default values - can be overridden by command line arguments
     garden_id = 'garden_1'
     field_id = 'field_1'
     
@@ -60,7 +58,6 @@ if __name__ == '__main__':
     
     print(f"Starting sensor for {garden_id}/{field_id}...")
     
-    # Create sensor - ID is assigned dynamically by Catalogue
     sensor = SensorNode(catalogue_url, garden_id=garden_id, field_id=field_id)
     
     try:
