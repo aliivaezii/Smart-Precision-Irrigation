@@ -173,7 +173,7 @@ if __name__ == '__main__':
     
     weather = WeatherCheck(catalogue_url)
     try:
-        weather.run(interval=60)  # Check every 60s for testing
+        weather.run(interval=60) 
     except KeyboardInterrupt:
         weather.stop()
         print("[Weather] Stopped")
