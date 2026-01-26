@@ -47,7 +47,7 @@ System
 
 ## 2. Architecture Diagram
 
-![Architecture](Architecture.jpeg)
+![Architecture](Architecture.png)
 
 ### Component Overview
 
@@ -278,3 +278,4 @@ The Smart Precision Irrigation System demonstrates:
 ---
 
 *Document Version: 2.2 | Last Updated: January 2026*
+
