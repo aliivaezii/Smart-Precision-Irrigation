@@ -1,9 +1,6 @@
 """
 Device Simulator - Auto-Discovery Mode
 
-This script automatically discovers ALL registered devices from the Catalogue
-and simulates them. No need to manually specify garden_id/field_id!
-
 How it works:
 1. Connects to the Catalogue to get the list of registered devices
 2. For each sensor: publishes simulated readings every 10 seconds
