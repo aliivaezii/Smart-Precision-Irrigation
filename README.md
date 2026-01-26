@@ -163,7 +163,7 @@ python src/devices/device_simulator.py
 
 > **Tip**: The launcher scripts (`scripts/macos/start.py`) automatically start the Device Simulator!
 
-### 📋 Manual Device Scripts (Alternative)
+### Manual Device Scripts (Alternative)
 
 If you prefer to run individual device processes manually:
 
@@ -420,7 +420,7 @@ python src/devices/sensor_node.py garden_2 field_1
 
 ---
 
-## ⚙️ Configuration
+## Configuration
 
 The system uses `config/system_config.json` for centralized configuration:
 
@@ -477,7 +477,7 @@ The system uses `config/system_config.json` for centralized configuration:
 
 ---
 
-## 🌐 Services Port Reference
+## Services Port Reference
 
 | Service | Port | Description |
 |---------|------|-------------|
@@ -487,13 +487,13 @@ The system uses `config/system_config.json` for centralized configuration:
 
 ---
 
-## 📚 Documentation
+## Documentation
 
 * **[ARCHITECTURE.md](docs/ARCHITECTURE.md)** — Complete technical documentation
 
 ---
 
-## 👥 Team Members
+## Team Members
 * **Ali Vaezi** (s336256) 
 * **Nicolas Restrepo-Lopez** (s336477) 
 * **Roderick Tossato Silva** (s336217) 
@@ -501,7 +501,7 @@ The system uses `config/system_config.json` for centralized configuration:
 
 ---
 
-## 📄 License
+## License
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
 ---
