@@ -1,17 +1,17 @@
-# Smart Precision Irrigation System 2.2 
+# Smart Precision Irrigation System 2.2
 
 ![Python](https://img.shields.io/badge/Python-3.11%2B-blue?style=for-the-badge&logo=python)
 ![Platform](https://img.shields.io/badge/Platform-Raspberry%20Pi-red?style=for-the-badge&logo=raspberrypi)
 ![Architecture](https://img.shields.io/badge/Architecture-Microservices-orange?style=for-the-badge)
 ![License](https://img.shields.io/badge/License-MIT-green?style=for-the-badge)
 
-## Project Overview
+##  Project Overview
 The **Smart Precision Irrigation System** is an IoT-based platform designed to optimize agricultural water usage and prevent crop loss due to climate anomalies.
 
 Unlike traditional timer-based systems, this platform employs a **Microservices Architecture** to make real-time decisions based on soil moisture data, local temperature, and external weather forecasts.
 
 **Key Features:**
-* **Smart Water Management:** Triggers irrigation based on crop type, field size, and moisture deficit.
+* **Smart Water Management:** Triggers irrigation based on crop type and moisture threshold.
 * **Multi-Garden Support:** Manage multiple gardens with independent field configurations.
 * **Gravity-Fed Irrigation:** Uses elevated water tanks for energy-efficient water delivery without pumps.
 * **Frost Prevention:** Monitors temperature forecasts and publishes frost alerts when T < 2°C.
@@ -24,7 +24,7 @@ Unlike traditional timer-based systems, this platform employs a **Microservices 
 
 ---
 
-## System Architecture
+##  System Architecture
 The software strictly follows **Object-Oriented Programming (OOP)** principles and uses **SenML** message format for all MQTT communications.
 
 ### 1. The Edge Layer (Sensors & Actuators)
@@ -36,14 +36,14 @@ Running on **Raspberry Pi Pico 2 W** microcontrollers:
 Running on a **Raspberry Pi 5** Gateway, communicating via **MQTT** and **REST**:
 * **Resource Catalogue (port 8080):** Central registry with full CRUD (GET/POST/PUT/DELETE) for devices.
 * **Status Service (port 9090):** Caches all device states with smart payload merging (combines soil_moisture + temperature from same sensor). Provides REST API for status queries.
-* **Water Manager:** The brain of the operation. Uses **smart irrigation logic** based on crop type and field size.
+* **Water Manager:** The brain of the operation. Triggers irrigation based on moisture threshold and crop type. Weather-aware (skips during rain/frost).
 * **Weather-Check:** Background service polling Open-Meteo for rain AND frost forecasts. Publishes alerts via MQTT.
 * **Telegram Bot:** Subscribes to weather/frost alerts via MQTT and forwards them to users. Queries Status Service via REST for system status.
 * **ThingSpeak Adaptor:** Uploads sensor data from Field 1 to the cloud using wildcard MQTT subscriptions (works even when devices register after startup).
 
 ---
 
-## Device Architecture
+##  Device Architecture
 
 The system uses **Object-Oriented inheritance** to avoid code duplication between sensors and actuators:
 
@@ -67,7 +67,7 @@ BaseDevice (common logic: self-registration, bootstrap, heartbeat, MQTT)
 
 ---
 
-## Device Registration
+##  Device Registration
 
 Devices **self-register** with the Catalogue and receive dynamically assigned IDs:
 
@@ -89,7 +89,7 @@ Devices send heartbeats every ~60 seconds to keep registration alive.
 
 ---
 
-## ➕ Adding Additional Sensors & Actuators
+##  Adding Additional Sensors & Actuators
 
 You can register new devices manually using **Postman** or any REST client. The Catalogue assigns a unique ID automatically.
 
@@ -120,9 +120,9 @@ You can register new devices manually using **Postman** or any REST client. The 
 ### JSON Fields:
 | Field | Required | Description |
 |-------|----------|-------------|
-| `type` | Yes | `"sensor"` or `"actuator"` |
-| `garden_id` | Yes | Garden identifier (e.g., `"garden_1"`) |
-| `field_id` | Yes | Field identifier (e.g., `"field_1"`) |
+| `type` |  Yes | `"sensor"` or `"actuator"` |
+| `garden_id` |  Yes | Garden identifier (e.g., `"garden_1"`) |
+| `field_id` |  Yes | Field identifier (e.g., `"field_1"`) |
 | `name` | No | Human-readable name |
 
 ### Expected Response:
@@ -141,7 +141,7 @@ You can register new devices manually using **Postman** or any REST client. The 
 
 > **Note**: The Catalogue generates a unique ID and MQTT topics automatically. The Water Manager auto-discovers new devices every 60 seconds.
 
-### Auto-Simulation with Device Simulator
+###  Auto-Simulation with Device Simulator
 
 The **Device Simulator** automatically discovers and simulates ALL registered devices. No need to manually run individual device scripts!
 
@@ -163,7 +163,7 @@ python src/devices/device_simulator.py
 
 > **Tip**: The launcher scripts (`scripts/macos/start.py`) automatically start the Device Simulator!
 
-### Manual Device Scripts (Alternative)
+###  Manual Device Scripts (Alternative)
 
 If you prefer to run individual device processes manually:
 
@@ -179,7 +179,7 @@ python src/devices/actuator_node.py garden_1 field_3
 
 ---
 
-## Multiple Gardens Support
+##  Multiple Gardens Support
 
 The system supports multiple gardens, each with their own fields and crop configurations:
 
@@ -224,7 +224,7 @@ The system supports multiple gardens, each with their own fields and crop config
 
 ---
 
-## SenML Message Format
+##  SenML Message Format
 
 All MQTT messages follow the course-standard SenML format:
 
@@ -253,27 +253,28 @@ All MQTT messages follow the course-standard SenML format:
 
 ---
 
-## Smart Irrigation Logic
+##  Smart Irrigation Logic
 
-The Water Manager calculates irrigation duration dynamically:
+The Water Manager triggers irrigation when soil moisture falls below the configured threshold (default: 30%). Irrigation duration is determined by crop type:
 
-```
-water_needed_mm = (TARGET_MOISTURE - current_moisture) * crop_factor
-total_liters = water_needed_mm * field_size_m2
-duration_sec = total_liters / (flow_rate_lpm / 60)
-```
+**Decision Logic:**
+1. If `moisture < threshold` AND no rain/frost alerts → trigger irrigation
+2. Duration is based on crop type lookup table
 
-**Crop Factors:**
-| Crop | Factor | Typical Duration |
-|------|--------|------------------|
-| Tomato | 1.2 | 600s (10 min) |
-| Corn | 1.0 | 480s (8 min) |
-| Lettuce | 0.8 | 300s (5 min) |
-| Wheat | 0.6 | 240s (4 min) |
+**Crop-Based Durations:**
+| Crop | Duration |
+|------|----------|
+| Tomato | 600s (10 min) |
+| Corn | 480s (8 min) |
+| Lettuce | 300s (5 min) |
+| Wheat | 240s (4 min) |
+| Default | 300s (5 min) |
+
+**Weather-Aware:** Irrigation is skipped if rain is predicted (>5mm) or frost alert is active (T < 2°C).
 
 ---
 
-## Resource Tracking
+##  Resource Tracking
 
 When an actuator closes its valve, it publishes resource usage:
 
@@ -296,7 +297,7 @@ When an actuator closes its valve, it publishes resource usage:
 
 ---
 
-## Hardware Stack
+##  Hardware Stack
 | Device | Quantity | Function |
 | :--- | :--- | :--- |
 | **Raspberry Pi 5** | 1 | Central Gateway & Microservices Host |
@@ -308,7 +309,7 @@ When an actuator closes its valve, it publishes resource usage:
 
 ---
 
-## Installation & Setup
+##  Installation & Setup
 
 ### Prerequisites
 * Python 3.9 or higher
@@ -335,7 +336,7 @@ pip install -r requirements.txt
 
 ### 4. Start the System
 
-#### Quick Start (Recommended)
+####  Quick Start (Recommended)
 Use the automated launcher scripts to start all services in separate terminals:
 
 ```
@@ -369,7 +370,7 @@ python scripts\windows\start.py --powershell # Use PowerShell instead of cmd
 | Startup Delays | Waits between services for proper initialization |
 | Named Windows | Each terminal has a descriptive title |
 
-#### Stop the System
+####  Stop the System
 **macOS:**
 ```bash
 python scripts/macos/stop.py         # Stop all services (with confirmation)
@@ -382,7 +383,7 @@ python scripts\windows\stop.py         # Stop all services (with confirmation)
 python scripts\windows\stop.py --force # Stop without confirmation
 ```
 
-#### Manual Start (Alternative)
+####  Manual Start (Alternative)
 If you prefer to start services manually in separate terminals:
 
 ```bash
@@ -420,7 +421,7 @@ python src/devices/sensor_node.py garden_2 field_1
 
 ---
 
-## Configuration
+##  Configuration
 
 The system uses `config/system_config.json` for centralized configuration:
 
@@ -477,7 +478,7 @@ The system uses `config/system_config.json` for centralized configuration:
 
 ---
 
-## Services Port Reference
+##  Services Port Reference
 
 | Service | Port | Description |
 |---------|------|-------------|
@@ -487,13 +488,13 @@ The system uses `config/system_config.json` for centralized configuration:
 
 ---
 
-## Documentation
+## 📚 Documentation
 
 * **[ARCHITECTURE.md](docs/ARCHITECTURE.md)** — Complete technical documentation
 
 ---
 
-## Team Members
+##  Team Members
 * **Ali Vaezi** (s336256) 
 * **Nicolas Restrepo-Lopez** (s336477) 
 * **Roderick Tossato Silva** (s336217) 
@@ -501,7 +502,7 @@ The system uses `config/system_config.json` for centralized configuration:
 
 ---
 
-## License
+##  License
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
 ---
