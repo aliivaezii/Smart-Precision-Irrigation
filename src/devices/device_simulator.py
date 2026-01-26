@@ -18,17 +18,14 @@ This is the RECOMMENDED way to run device simulations for testing.
 
 import sys
 import os
-sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'common'))
-
 from MyMQTT import MyMQTT
 import time
 import requests
 import json
 import random
 import threading
+sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'common'))
 
-
-# Configuration
 CATALOGUE_URL = "http://localhost:8080/"
 SENSOR_PUBLISH_INTERVAL = 10  # seconds between sensor readings
 DEVICE_CHECK_INTERVAL = 60    # seconds between checking for new devices
@@ -44,8 +41,6 @@ class SensorSimulator:
         self.device_id = device_id
         self.topics = topics
         self.running = True
-        
-        # Create MQTT client
         self.client = MyMQTT(device_id, broker, port)
         self.client.start()
         time.sleep(0.5)
@@ -89,7 +84,6 @@ class ActuatorSimulator:
         self.resource_topic = resource_topic
         self.running = True
         
-        # Valve state
         self.valve_open = False
         self.open_time = 0
         self.flow_rate = 20.0  # Liters per minute
@@ -99,7 +93,6 @@ class ActuatorSimulator:
         self.client.start()
         time.sleep(0.5)
         
-        # Subscribe to command topics
         for topic in subscribe_topics:
             self.client.subscribe(topic, qos=1)
             print(f"[{device_id}] Subscribed to: {topic}")
@@ -134,10 +127,8 @@ class ActuatorSimulator:
         print(f"[{self.device_id}] Duration: {duration} seconds")
         print("=" * 50)
         
-        # Publish status
         self.publish_status('OPEN')
         
-        # Schedule auto-close after duration
         if duration > 0:
             timer = threading.Timer(duration, self.close_valve)
             timer.start()
@@ -149,7 +140,6 @@ class ActuatorSimulator:
         
         self.valve_open = False
         
-        # Calculate water used
         actual_duration = time.time() - self.open_time
         water_liters = (self.flow_rate * actual_duration) / 60.0
         
@@ -158,10 +148,8 @@ class ActuatorSimulator:
         print(f"[{self.device_id}] Duration: {actual_duration:.1f}s, Water: {water_liters:.2f}L")
         print("=" * 50)
         
-        # Publish status
         self.publish_status('CLOSED')
         
-        # Publish resource usage
         self.publish_resource_usage(water_liters, actual_duration)
     
     def publish_status(self, status):
@@ -194,12 +182,10 @@ def get_config():
     response = requests.get(CATALOGUE_URL)
     return response.json()
 
-
 def get_devices():
     """Fetch list of registered devices from Catalogue."""
     response = requests.get(CATALOGUE_URL + "devices")
     return response.json()
-
 
 def register_default_devices():
     """Register default devices if none exist."""
@@ -211,7 +197,6 @@ def register_default_devices():
     
     print("No devices found. Registering default devices...")
     
-    # Default devices to register
     default_devices = [
         {"type": "sensor", "garden_id": "garden_1", "field_id": "field_1", "name": "Sensor Garden 1 Field 1"},
         {"type": "actuator", "garden_id": "garden_1", "field_id": "field_1", "name": "Valve Garden 1 Field 1"},
@@ -248,7 +233,6 @@ def main():
     print("=" * 60)
     print()
     
-    # Get configuration from Catalogue
     config = get_config()
     broker = config['broker']['address']
     port = config['broker']['port']
@@ -261,10 +245,9 @@ def main():
     register_default_devices()
     
     # Keep track of active simulators
-    sensors = {}      # device_id -> SensorSimulator
-    actuators = {}    # device_id -> ActuatorSimulator
-    
-    # Main loop
+    sensors = {}      
+    actuators = {}    
+
     running = True
     last_check = 0
     
@@ -310,7 +293,6 @@ def main():
     except KeyboardInterrupt:
         print("\n[Simulator] Shutting down...")
     
-    # Stop all simulators
     for sensor in sensors.values():
         sensor.stop()
     for actuator in actuators.values():
