@@ -21,13 +21,11 @@ Usage:
 
 import sys
 import os
-sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'common'))
-
 from MyMQTT import MyMQTT
 import time
 import requests
 import json
-
+sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'common'))
 
 class BaseDevice:
     """
@@ -60,20 +58,16 @@ class BaseDevice:
         self.device_id = None
         self.topics = {}
         
-        # Step 1: Register with Catalogue and get assigned ID
         print(f"[{device_type}] Registering with Catalogue...")
         self._self_register()
         
-        # Step 2: Bootstrap - get full config from Catalogue
         print(f"[{self.device_id}] Fetching config from {catalogue_url}...")
         res = requests.get(catalogue_url)
         self.config = res.json()
         
-        # Get broker info
         self.broker = self.config['broker']['address']
         self.port = self.config['broker']['port']
         
-        # Get field configuration from garden
         gardens = self.config.get('gardens', {})
         if garden_id in gardens:
             garden_config = gardens[garden_id]
@@ -101,7 +95,6 @@ class BaseDevice:
         res = requests.post(url, json=payload)
         result = res.json()
         
-        # Get assigned ID and topics from Catalogue
         self.device_id = result['id']
         self.topics = result.get('topics', {})
         self.name = payload['name']
@@ -157,7 +150,6 @@ class BaseSensor(BaseDevice):
         
         print(f"[{self.device_id}] Publish topics: {self.publish_topics}")
         
-        # Start MQTT client (no notifier needed for sensors)
         self.start_mqtt()
 
     def sense(self):
@@ -178,7 +170,6 @@ class BaseSensor(BaseDevice):
         """
         timestamp = time.time()
         
-        # Build SenML message
         msg = []
         for name, value in readings.items():
             msg.append({
@@ -205,17 +196,14 @@ class BaseSensor(BaseDevice):
         heartbeat_interval = 6  # Send heartbeat every 6 readings
         
         while True:
-            # Read sensors
+
             readings = self.sense()
-            
-            # Publish readings
+
             self.publish_reading(readings)
             
-            # Print readings
             reading_str = ', '.join([f"{k}={v}" for k, v in readings.items()])
             print(f"[{self.device_id}] {reading_str}")
             
-            # Heartbeat
             heartbeat_count += 1
             if heartbeat_count >= heartbeat_interval:
                 self.heartbeat()
@@ -240,8 +228,6 @@ class BaseActuator(BaseDevice):
     def __init__(self, catalogue_url, garden_id='garden_1', field_id='field_1'):
         """Initialize the actuator and register with Catalogue."""
         super().__init__(catalogue_url, garden_id, field_id, device_type='actuator')
-        
-        # Get topics from registration response
         self.subscribe_topics = self.topics.get('subscribe', [])
         self.publish_topics = self.topics.get('publish', [])
         
@@ -253,7 +239,6 @@ class BaseActuator(BaseDevice):
         print(f"[{self.device_id}] Subscribe: {self.subscribe_topics}")
         print(f"[{self.device_id}] Publish: {self.publish_topics}")
         
-        # Start MQTT client with this object as notifier
         self.start_mqtt(notifier=self)
 
     def notify(self, topic, payload):
@@ -296,7 +281,6 @@ class BaseActuator(BaseDevice):
         """
         timestamp = time.time()
         
-        # Build SenML message
         msg = []
         for name, value in status_data.items():
             msg.append({
@@ -306,14 +290,13 @@ class BaseActuator(BaseDevice):
                 'v': value
             })
         
-        # Publish to all topics
         for topic in self.publish_topics:
             self.client.publish(topic, json.dumps(msg))
             print(f"[{self.device_id}] Published status to {topic}")
 
     def run(self):
         """Subscribe to command topics and wait for commands."""
-        # Subscribe to command topics
+
         for topic in self.subscribe_topics:
             self.client.subscribe(topic, qos=1)
             print(f"[{self.device_id}] Subscribed to {topic}")
