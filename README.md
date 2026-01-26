@@ -488,7 +488,7 @@ The system uses `config/system_config.json` for centralized configuration:
 
 ---
 
-## 📚 Documentation
+##  Documentation
 
 * **[ARCHITECTURE.md](docs/ARCHITECTURE.md)** — Complete technical documentation
 
