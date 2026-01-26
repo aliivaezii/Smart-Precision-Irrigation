@@ -1,7 +1,7 @@
 """
 MQTT Client Wrapper
 
-Provides a simplified interface for MQTT communication using paho-mqtt.
+Provides a interface for MQTT communication using paho-mqtt.
 Handles connection, publishing, and subscribing with optional callbacks.
 """
 
