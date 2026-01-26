@@ -15,14 +15,12 @@ Features:
 
 import sys
 import os
-sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..', 'common'))
-
 from MyMQTT import MyMQTT
 import time
 import requests
 import json
 import threading
-
+sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..', 'common'))
 
 class WaterManager:
     """
@@ -45,39 +43,29 @@ class WaterManager:
     def __init__(self, catalogue_url):
         self.catalogue_url = catalogue_url
         
-        # Load config from Catalogue
         print("[WaterManager] Loading config...")
         config = requests.get(catalogue_url).json()
         
-        # Broker settings
         self.broker = config['broker']['address']
         self.port = config['broker']['port']
         
-        # Threshold from settings
         self.threshold = config.get('settings', {}).get('moisture_threshold', 30.0)
         
-        # Alert topics
         topics = config.get('topics', {})
         self.topic_rain = topics.get('weather_alert', 'smart_irrigation/weather/alert')
         self.topic_frost = topics.get('frost_alert', 'smart_irrigation/weather/frost')
         
-        # Gardens config for crop types
         self.gardens = config.get('gardens', {})
+        self.sensors = {}      
+        self.actuators = {}    
         
-        # Device tracking: sensors and actuators by field
-        self.sensors = {}      # topic -> {garden_id, field_id}
-        self.actuators = {}    # "garden_field" -> command_topic
-        
-        # Weather state
         self.rain_alert = False
         self.frost_alert = False
         
-        # Start MQTT
         self.client = MyMQTT('water_manager', self.broker, self.port, notifier=self)
         self.client.start()
         time.sleep(1)
         
-        # Load devices and start auto-discovery
         self._load_devices()
         self._start_auto_discovery()
         
