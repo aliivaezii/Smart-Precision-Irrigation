@@ -13,15 +13,13 @@ instead of subscribing to all topics themselves.
 
 import sys
 import os
-sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..', 'common'))
-
 from MyMQTT import MyMQTT
 import json
 import time
 import requests
 import threading
 import cherrypy
-
+sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..', 'common'))
 
 class StatusService:
     """
@@ -38,7 +36,6 @@ class StatusService:
         self.subscribed_topics = set()
         self.running = True
 
-        # 1. Bootstrap: Get Broker and Initial Config
         print(f"[StatusService] Fetching config from {self.catalogue_url}...")
         res = requests.get(self.catalogue_url)
         data = res.json()
@@ -49,15 +46,14 @@ class StatusService:
         
         print(f"[StatusService] Broker: {self.broker}:{self.port}")
 
-        # 2. Start MQTT Client
         self.client = MyMQTT('status_service', self.broker, self.port, notifier=self)
         self.client.start()
         time.sleep(1)
 
-        # 3. Initial Subscription
+        #  Initial Subscription
         self.update_subscriptions()
 
-        # 4. Start Background Thread for Catalogue Updates
+        #  Start Background Thread for Catalogue Updates
         self.updater_thread = threading.Thread(target=self.periodic_update)
         self.updater_thread.daemon = True
         self.updater_thread.start()
@@ -71,7 +67,7 @@ class StatusService:
 
     def update_subscriptions(self):
         """Fetch all devices from Catalogue and subscribe to their publish topics."""
-        # Build URL for devices endpoint
+        
         url = self.catalogue_url
         if not url.endswith('/'):
             url += '/'
@@ -131,12 +127,10 @@ class StatusService:
             for item in data:
                 if isinstance(item, dict) and 'n' in item:
                     measurements[item['n']] = item
-            # Convert back to list
             merged_payload = list(measurements.values())
         else:
             merged_payload = data
 
-        # Store the merged data
         self.latest_data[device_id] = {
             "topic": topic,
             "timestamp": timestamp,
@@ -185,10 +179,7 @@ class StatusService:
 
 
 if __name__ == '__main__':
-    # Configuration
     catalogue_url = 'http://localhost:8080/'
-    
-    # CherryPy Configuration
     conf = {
         '/': {
             'request.dispatch': cherrypy.dispatch.MethodDispatcher(),
@@ -200,7 +191,6 @@ if __name__ == '__main__':
         'server.socket_port': 9090
     })
 
-    # Start Service
     service = StatusService(catalogue_url)
     cherrypy.tree.mount(service, '/', conf)
     
