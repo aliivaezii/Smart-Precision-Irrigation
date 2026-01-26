@@ -120,23 +120,26 @@ class WaterManager:
 
     def notify(self, topic, payload):
         """Handle incoming MQTT messages."""
-        try:
-            data = json.loads(payload)
-        except:
-            return
+        data = json.loads(payload)
         
         # Rain alert
         if topic == self.topic_rain:
-            self.rain_alert = isinstance(data, dict) and data.get('status') == 'ACTIVE'
-            status = "🌧️ ACTIVE" if self.rain_alert else "cleared"
-            print(f"[WaterManager] Rain alert {status}")
+            if isinstance(data, dict) and data.get('status') == 'ACTIVE':
+                self.rain_alert = True
+                print("[WaterManager] Rain alert ACTIVE")
+            else:
+                self.rain_alert = False
+                print("[WaterManager] Rain alert cleared")
             return
         
         # Frost alert
         if topic == self.topic_frost:
-            self.frost_alert = isinstance(data, dict) and data.get('status') == 'ACTIVE'
-            status = "❄️ ACTIVE" if self.frost_alert else "cleared"
-            print(f"[WaterManager] Frost alert {status}")
+            if isinstance(data, dict) and data.get('status') == 'ACTIVE':
+                self.frost_alert = True
+                print("[WaterManager] Frost alert ACTIVE")
+            else:
+                self.frost_alert = False
+                print("[WaterManager] Frost alert cleared")
             return
         
         # Sensor data (SenML format)
