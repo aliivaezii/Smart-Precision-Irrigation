@@ -66,9 +66,9 @@ def stop_processes(processes, force=False):
     """Stop the given processes."""
     if not processes:
         print()
-        print("✅ No Smart Irrigation services are currently running.")
+        print(" No Smart Irrigation services are currently running.")
         print()
-        print("💡 If services are running but not detected:")
+        print(" If services are running but not detected:")
         print("   • Close terminal windows manually")
         print("   • Use Task Manager to end 'python.exe' processes")
         print()
@@ -76,7 +76,7 @@ def stop_processes(processes, force=False):
     
     print()
     print("=" * 60)
-    print("🌱 Smart Precision Irrigation System - Stop")
+    print(" Smart Precision Irrigation System - Stop")
     print("=" * 60)
     print()
     print(f"Found {len(processes)} running service(s):")
@@ -117,9 +117,9 @@ def stop_processes(processes, force=False):
     print()
     print("=" * 60)
     if stopped > 0:
-        print(f"✅ Stopped {stopped} service(s)")
+        print(f" Stopped {stopped} service(s)")
     if failed > 0:
-        print(f"❌ Failed to stop {failed} service(s)")
+        print(f" Failed to stop {failed} service(s)")
     print("=" * 60)
     print()
 
@@ -131,7 +131,7 @@ def main():
     
     # Check platform
     if sys.platform != "win32":
-        print("❌ This script is for Windows only.")
+        print(" This script is for Windows only.")
         print("   For macOS: python scripts/macos/stop.py")
         sys.exit(1)
     
