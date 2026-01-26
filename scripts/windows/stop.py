@@ -13,7 +13,6 @@ Usage:
 import subprocess
 import sys
 
-# Service script names to look for
 SERVICE_PATTERNS = [
     "catalogue\\service.py",
     "weather_check\\service.py",
@@ -32,7 +31,6 @@ def find_service_processes():
     processes = []
     
     try:
-        # Use WMIC to find Python processes
         result = subprocess.run(
             ["wmic", "process", "where", "name like '%python%'", "get", "processid,commandline", "/format:csv"],
             capture_output=True,
@@ -56,8 +54,7 @@ def find_service_processes():
                         break
     
     except (subprocess.CalledProcessError, FileNotFoundError):
-        # WMIC might not be available
-        print("ℹ️  Limited process detection. Some services may not be found.")
+        print("Limited process detection. Some services may not be found.")
     
     return processes
 
@@ -126,16 +123,13 @@ def stop_processes(processes, force=False):
 
 def main():
     """Main function."""
-    # Check for --force flag
     force = "--force" in sys.argv or "-f" in sys.argv
     
-    # Check platform
     if sys.platform != "win32":
         print(" This script is for Windows only.")
         print("   For macOS: python scripts/macos/stop.py")
         sys.exit(1)
     
-    # Find and stop processes
     processes = find_service_processes()
     stop_processes(processes, force=force)
 
