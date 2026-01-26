@@ -47,10 +47,10 @@ def open_cmd_with_command(title, command, working_dir):
     try:
         full_command = f'start "{title}" cmd /K "cd /d {working_dir} && echo === {title} === && {command}"'
         subprocess.run(full_command, shell=True, check=True)
-        print(f"  ✅ {title}")
+        print(f"   {title}")
         return True
     except subprocess.CalledProcessError as e:
-        print(f"  ❌ {title}: {e}")
+        print(f"   {title}: {e}")
         return False
 
 
@@ -60,10 +60,10 @@ def open_powershell_with_command(title, command, working_dir):
         ps_command = f'Set-Location -Path "{working_dir}"; Write-Host "=== {title} ===" -ForegroundColor Green; {command}'
         full_command = f'start powershell -NoExit -Command "{ps_command}"'
         subprocess.run(full_command, shell=True, check=True)
-        print(f"  ✅ {title}")
+        print(f"   {title}")
         return True
     except subprocess.CalledProcessError as e:
-        print(f"  ❌ {title}: {e}")
+        print(f"   {title}: {e}")
         return False
 
 
@@ -103,11 +103,11 @@ def start_services(python_cmd, include_devices=True, use_powershell=False):
     
     print()
     print("=" * 60)
-    print("🌱 Smart Precision Irrigation System")
+    print(" Smart Precision Irrigation System")
     print("=" * 60)
-    print(f"  📂 Project:  {PROJECT_ROOT}")
-    print(f"  🐍 Python:   {python_cmd}")
-    print(f"  💻 Terminal: {terminal_type}")
+    print(f"   Project:  {PROJECT_ROOT}")
+    print(f"   Python:   {python_cmd}")
+    print(f"   Terminal: {terminal_type}")
     print()
     
     # Start services
@@ -118,7 +118,7 @@ def start_services(python_cmd, include_devices=True, use_powershell=False):
         full_path = os.path.join(PROJECT_ROOT, script_path).replace("/", "\\")
         
         if not os.path.exists(full_path):
-            print(f"  ⚠️  Not found: {script_path}")
+            print(f"    Not found: {script_path}")
             continue
         
         command = f'{python_cmd} "{full_path}"'
@@ -135,7 +135,7 @@ def start_services(python_cmd, include_devices=True, use_powershell=False):
         full_path = os.path.join(PROJECT_ROOT, script_path).replace("/", "\\")
         
         if not os.path.exists(full_path):
-            print(f"  ⚠️  Not found: {script_path}")
+            print(f"    Not found: {script_path}")
         else:
             args_str = " ".join(args) if args else ""
             command = f'{python_cmd} "{full_path}" {args_str}'.strip()
@@ -144,14 +144,14 @@ def start_services(python_cmd, include_devices=True, use_powershell=False):
     
     print()
     print("=" * 60)
-    print("✅ System Started")
+    print(" System Started")
     print()
-    print("  📋 Endpoints:")
+    print("     Endpoints:")
     print("     Catalogue:  http://localhost:8080")
     print("     Devices:    http://localhost:8080/devices")
     print("     Gardens:    http://localhost:8080/gardens")
     print()
-    print("  💡 Tips:")
+    print("    Tips:")
     print("     • The Device Simulator auto-discovers registered devices")
     print("     • POST new devices to /devices - they start automatically!")
     print("     • Run 'python scripts\\windows\\stop.py' to stop all")
