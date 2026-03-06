@@ -1,0 +1,19 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it as below."
+title: "Smart Precision Irrigation: IoT-Based Weather-Aware Irrigation System"
+type: software
+authors:
+  - family-names: "Vaezi"
+    given-names: "Ali"
+    orcid: "https://orcid.org/0009-0003-7400-8688"
+repository-code: "https://github.com/aliivaezii/Smart-Precision-Irrigation"
+license: MIT
+keywords:
+  - iot
+  - smart-agriculture
+  - precision-irrigation
+  - raspberry-pi
+  - mqtt
+  - microservices
+  - weather-api
+  - telegram-bot
